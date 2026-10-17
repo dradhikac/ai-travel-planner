@@ -1,5 +1,13 @@
-# Documentation
+# Project Documentation
 
-Architecture records, design documents, and project guidelines for AI Travel Concierge.
+This directory contains architectural specifications, decision records, and operational guidelines for AI Travel Concierge.
 
-Documentation will be expanded as project features and specifications are developed.
+---
+
+## Contents
+
+- [AGENTS.md](../AGENTS.md): Operational rules, safety protocols, and conventions for AI coding agents.
+- [CONTRIBUTING.md](../CONTRIBUTING.md): Solo-developer workflow, branch naming, and pre-merge checklist.
+- [System Architecture](architecture.md): Modular monolith overview, planned module boundaries, and data flow.
+- [Architecture Decision Records (ADRs)](decisions/0001-phase1-stack.md):
+  - [ADR 0001: Phase 1 Core Stack and Modular Monolith](decisions/0001-phase1-stack.md)
