@@ -1,3 +1,5 @@
+import BackendStatus from "@/components/BackendStatus";
+
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col justify-between">
@@ -51,6 +53,16 @@ export default function Home() {
               established.
             </p>
           </div>
+
+          <section aria-labelledby="system-status-heading" className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <h2
+              id="system-status-heading"
+              className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              System status
+            </h2>
+            <BackendStatus />
+          </section>
 
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">

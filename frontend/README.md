@@ -64,4 +64,7 @@ Runs the built production server.
 
 - **App Router**: Source files reside in `src/app/`.
 - **Path Alias**: Import alias `@/*` maps to `./src/*`.
+- **API Client**: `src/lib/api/client.ts` provides a typed HTTP fetch wrapper (`apiClient`) configured with `config.apiBaseUrl`, a 5-second `AbortController` timeout, and typed `ApiError` classification (`network_error`, `timeout_error`, `http_error`, `invalid_json`).
+- **Health & Version Integration**: `src/lib/api/health.ts` exposes `getHealth()` and `getVersion()` with runtime schema validation.
+- **Backend Status Component**: `src/components/BackendStatus.tsx` renders real-time backend connection status (`checking`, `connected`, `unreachable`, `unexpected-response`) with accessible retry controls and visible focus indicators.
 - **Boundary**: Travel discovery and planning assistant only; no booking or reservation mechanisms.
