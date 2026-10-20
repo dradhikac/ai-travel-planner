@@ -12,12 +12,20 @@ This document outlines the environment variable baseline and secret-handling pol
 | `LOG_LEVEL` | Backend (`backend/app/core/config.py`) | No | `INFO` | `DEBUG` | No |
 | `CORS_ORIGINS` | Backend (`backend/app/core/config.py`) | No | `http://localhost:3000,http://127.0.0.1:3000` | `https://app.travel.example` | No |
 | `NEXT_PUBLIC_API_BASE_URL` | Frontend (`frontend/src/lib/config.ts`) | No | `http://localhost:8000` | `https://api.travel.example` | No |
+| `POSTGRES_USER` | Local Database (`docker-compose.yml`) | No | `postgres` | `postgres` | No |
+| `POSTGRES_PASSWORD` | Local Database (`docker-compose.yml`) | Yes | *None (Required)* | `change-me-local-only` | Yes (Dev) |
+| `POSTGRES_DB` | Local Database (`docker-compose.yml`) | No | `ai_travel_concierge` | `ai_travel_concierge` | No |
+| `POSTGRES_PORT` | Local Database (`docker-compose.yml`) | No | `5432` | `5433` | No |
 
 ### Notes on Variables
 - **`APP_ENV`**: Constrained to `development`, `test`, or `production`. Controls API documentation visibility (`/docs` disabled in production).
 - **`LOG_LEVEL`**: Standard library logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
 - **`CORS_ORIGINS`**: Comma-separated list of allowed origins. Wildcard `*` is explicitly rejected for security.
 - **`NEXT_PUBLIC_API_BASE_URL`**: HTTP/HTTPS base URL used by frontend client requests. Trailing slashes are stripped automatically.
+- **`POSTGRES_USER`**: Username for PostgreSQL container initialization and authentication.
+- **`POSTGRES_PASSWORD`**: Password for PostgreSQL container. Required via interpolation `${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}` to prevent hardcoded defaults.
+- **`POSTGRES_DB`**: Default database name created on container startup.
+- **`POSTGRES_PORT`**: Host port bound to container port 5432 on `127.0.0.1`. Defaults to 5432.
 
 ---
 
@@ -34,6 +42,9 @@ To configure your local environment, copy the template files:
 
 #### PowerShell (Windows 11)
 ```powershell
+# Root / Database container configuration
+Copy-Item .env.example .env
+
 # Backend configuration
 Copy-Item backend\.env.example backend\.env
 
@@ -43,6 +54,9 @@ Copy-Item frontend\.env.example frontend\.env.local
 
 #### Bash
 ```bash
+# Root / Database container configuration
+cp .env.example .env
+
 # Backend configuration
 cp backend/.env.example backend/.env
 
