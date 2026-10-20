@@ -46,13 +46,21 @@ npm run typecheck
 ```
 Executes `tsc --noEmit` to verify type safety in `strict` mode.
 
-### 5. Build Production Bundle
+### 5. Run Unit Tests
+```bash
+npm run test
+# or in watch mode during development:
+npm run test:watch
+```
+Executes the Vitest test suite (`vitest run`) in a simulated `jsdom` environment with `@testing-library/react` and `@testing-library/jest-dom`.
+
+### 6. Build Production Bundle
 ```bash
 npm run build
 ```
 Compiles and builds the production application.
 
-### 6. Start Production Server
+### 7. Start Production Server
 ```bash
 npm run start
 ```
@@ -67,4 +75,5 @@ Runs the built production server.
 - **API Client**: `src/lib/api/client.ts` provides a typed HTTP fetch wrapper (`apiClient`) configured with `config.apiBaseUrl`, a 5-second `AbortController` timeout, and typed `ApiError` classification (`network_error`, `timeout_error`, `http_error`, `invalid_json`).
 - **Health & Version Integration**: `src/lib/api/health.ts` exposes `getHealth()` and `getVersion()` with runtime schema validation.
 - **Backend Status Component**: `src/components/BackendStatus.tsx` renders real-time backend connection status (`checking`, `connected`, `unreachable`, `unexpected-response`) with accessible retry controls and visible focus indicators.
+- **Testing**: Unit tests are located in `tests/`, configured via `vitest.config.ts` using `jsdom`, `@testing-library/react`, and `@testing-library/jest-dom` with deterministic mocks.
 - **Boundary**: Travel discovery and planning assistant only; no booking or reservation mechanisms.
