@@ -16,6 +16,7 @@ This document outlines the environment variable baseline and secret-handling pol
 | `POSTGRES_PASSWORD` | Local Database (`docker-compose.yml`) | Yes | *None (Required)* | `change-me-local-only` | Yes (Dev) |
 | `POSTGRES_DB` | Local Database (`docker-compose.yml`) | No | `ai_travel_concierge` | `ai_travel_concierge` | No |
 | `POSTGRES_PORT` | Local Database (`docker-compose.yml`) | No | `5432` | `5433` | No |
+| `DATABASE_URL` | Backend (`backend/app/core/config.py`) | No | *None (Optional)* | `postgresql+psycopg://postgres:change-me-local-only@localhost:5432/ai_travel_concierge` | Yes (Dev) |
 
 ### Notes on Variables
 - **`APP_ENV`**: Constrained to `development`, `test`, or `production`. Controls API documentation visibility (`/docs` disabled in production).
@@ -26,6 +27,7 @@ This document outlines the environment variable baseline and secret-handling pol
 - **`POSTGRES_PASSWORD`**: Password for PostgreSQL container. Required via interpolation `${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}` to prevent hardcoded defaults.
 - **`POSTGRES_DB`**: Default database name created on container startup.
 - **`POSTGRES_PORT`**: Host port bound to container port 5432 on `127.0.0.1`. Defaults to 5432.
+- **`DATABASE_URL`**: Optional connection URL for relational database persistence. Uses SQLAlchemy format (`postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME`). The application starts normally when unset.
 
 ---
 

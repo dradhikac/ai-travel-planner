@@ -1,7 +1,12 @@
-"""Health check response schema."""
+"""Health check response schemas."""
 
 from pydantic import BaseModel
 
 
 class HealthResponse(BaseModel):
     status: str = "ok"
+
+
+class DatabaseHealthResponse(BaseModel):
+    status: str = "ok"
+    database: str = "reachable"
