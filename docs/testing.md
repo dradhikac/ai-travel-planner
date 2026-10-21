@@ -163,3 +163,35 @@ git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$' || true
 git grep -nIE "(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|BEGIN (RSA |EC )?PRIVATE KEY)" || true
 git grep -nIE "([A-Za-z]:\\Users\\|/home/[a-z]+/|/Users/[A-Za-z]+/)" || true
 ```
+
+---
+
+## 7. Continuous Integration (GitHub Actions)
+
+Continuous integration is configured in `.github/workflows/ci.yml`.
+
+### Workflow Triggers & Permissions
+- **Triggers**: Automated runs on `push` to `main` and `develop`, `pull_request` targeting `main` and `develop`, and manual trigger via `workflow_dispatch`.
+- **Permissions**: Minimum read privileges (`permissions: contents: read`). No secrets, credentials, or deployment tokens are requested or configured.
+- **Concurrency**: Per-ref concurrency group (`${{ github.workflow }}-${{ github.ref }}`) with `cancel-in-progress: true` to prevent redundant builds.
+
+### Pipeline Jobs
+1. **`backend`** (`ubuntu-latest`, working directory: `backend`):
+   - Sets up Python `3.11` via `actions/setup-python@v5` with pip caching keyed on requirements files.
+   - Installs development dependencies from `requirements-dev.txt`.
+   - Runs `ruff check .` for linting.
+   - Runs `ruff format --check .` for code formatting.
+   - Runs `pytest -q` for unit and contract testing (no database container required; database tests use deterministic mocks while integration tests skip when `DATABASE_URL` is unset).
+2. **`frontend`** (`ubuntu-latest`, working directory: `frontend`):
+   - Sets up Node.js `20` via `actions/setup-node@v4` with npm caching keyed on `frontend/package-lock.json`.
+   - Performs clean dependency installation via `npm ci`.
+   - Runs static lint analysis via `npm run lint`.
+   - Runs type-checking via `npm run typecheck` (`tsc --noEmit`).
+   - Runs unit test suite via `npm run test` (`vitest run`).
+   - Validates production bundle compilation via `npm run build` with `NEXT_PUBLIC_API_BASE_URL` set to `http://localhost:8000`.
+3. **`repo-hygiene`** (`ubuntu-latest`):
+   - Validates that no `.env` files outside `.env.example` are tracked in Git.
+   - Scans tracked files for accidental private keys or secret token patterns.
+
+> [!NOTE]
+> All workflow commands are validated locally. Real GitHub Actions execution status is unverified until the branch is pushed to remote and observed on GitHub.
