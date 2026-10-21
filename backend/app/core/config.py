@@ -22,6 +22,14 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+    DATABASE_URL: str | None = None
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def empty_str_to_none(cls, v: str | None) -> str | None:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     @field_validator("CORS_ORIGINS", mode="after")
     @classmethod

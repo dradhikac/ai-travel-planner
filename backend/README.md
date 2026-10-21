@@ -15,6 +15,9 @@ Phase 1 foundation: FastAPI modular monolith application factory, health check (
 - **Pytest**: `9.1.1` (`pytest~=9.1.1`)
 - **HTTPX**: `0.28.1` (`httpx~=0.28.1`)
 - **Ruff**: `0.17.1` (`ruff~=0.17.1`)
+- **SQLAlchemy**: `2.0.55` (`sqlalchemy~=2.0.55`)
+- **Psycopg**: `3.2.13` (`psycopg[binary]~=3.2.13`)
+- **Alembic**: `1.14.1` (`alembic~=1.14.1`)
 
 ---
 
@@ -51,6 +54,7 @@ python -m uvicorn app.main:app --reload --port 8000
 ```
 API endpoints will be available at:
 - Health check: [http://localhost:8000/health](http://localhost:8000/health)
+- Database readiness: [http://localhost:8000/health/db](http://localhost:8000/health/db)
 - Version metadata: [http://localhost:8000/api/version](http://localhost:8000/api/version)
 - OpenAPI interactive docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
@@ -78,6 +82,19 @@ API endpoints will be available at:
 **Bash**:
 ```bash
 ./.venv/bin/python -m pytest -q
+```
+
+### 6. Database Migrations (Alembic)
+
+When `DATABASE_URL` is configured in `backend/.env` (and PostgreSQL is running):
+
+**PowerShell & Bash**:
+```bash
+# Apply migrations to the latest revision:
+python -m alembic upgrade head
+
+# Inspect the current migration revision:
+python -m alembic current
 ```
 
 ---

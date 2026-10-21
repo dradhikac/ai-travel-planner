@@ -3,6 +3,9 @@ minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra -q"
+markers = [
+    "integration: tests requiring an active database or live service",
+]
 
 [tool.ruff]
 target-version = "py311"
