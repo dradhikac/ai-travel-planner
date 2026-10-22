@@ -12,5 +12,6 @@ This directory contains architectural specifications, decision records, and oper
 - [Environment & Secrets](environment.md): Environment variables baseline and secret-handling rules.
 - [Testing & QA Guide](testing.md): Automated test procedures, smoke test script usage, and manual browser verification checklist.
 - [Local Development Guide](local-development.md): Docker Compose PostgreSQL database setup, management commands, and operational warnings.
+- [Deployment Guide](deployment.md): Local container shell, image build procedures, runtime configuration, and pre-deployment decisions.
 - [Architecture Decision Records (ADRs)](decisions/0001-phase1-stack.md):
   - [ADR 0001: Phase 1 Core Stack and Modular Monolith](decisions/0001-phase1-stack.md)

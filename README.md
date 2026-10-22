@@ -27,6 +27,7 @@ AI Travel Concierge aims to resolve these issues by providing a structured, veri
 | **External Travel APIs** | None (tests use deterministic mocks; zero network egress). | Amadeus, Google Places, TripAdvisor, Skyscanner, or weather APIs. |
 | **Booking & Commerce** | **Explicitly Out of Scope**: Never claims or performs bookings, ticketing, payments, or reservations. | Out of scope permanently. |
 | **Quality & Automation** | Pytest unit and CORS integration tests, Vitest component test harness, standalone smoke test script, GitHub Actions CI workflow. | End-to-end Playwright tests, automated staging deployments, performance benchmarking. |
+| **Deployment & Containers** | Local Docker container shell (`Dockerfile` and `.dockerignore` for backend and frontend, non-root users, standalone Next.js build), local image verification. | Cloud hosting provider, remote deployment pipelines, Kubernetes orchestration. |
 
 ---
 
@@ -84,7 +85,9 @@ ai-travel-concierge/
 │   └── workflows/
 │       └── ci.yml              # GitHub Actions CI pipeline (backend, frontend, hygiene)
 ├── backend/
+│   ├── .dockerignore           # Container build exclusion rules
 │   ├── .env.example            # Backend environment template
+│   ├── Dockerfile              # Python 3.11-slim production container definition
 │   ├── README.md               # Backend-specific architecture and setup guide
 │   ├── alembic.ini             # Alembic configuration (no credentials)
 │   ├── pyproject.toml          # Python tool configuration (Ruff, Pytest)
@@ -131,14 +134,17 @@ ai-travel-concierge/
 ├── docs/
 │   ├── README.md               # Documentation directory index
 │   ├── architecture.md         # Architecture overview and design seams
+│   ├── deployment.md           # Local container build, run, and pre-deploy guide
 │   ├── environment.md          # Exhaustive environment variable specification
 │   ├── local-development.md    # Comprehensive local developer manual
 │   ├── testing.md              # Testing guide, smoke testing, and QA checklists
 │   └── decisions/
 │       └── 0001-phase1-stack.md# Architecture Decision Record: Phase 1 tech stack
 ├── frontend/
+│   ├── .dockerignore           # Container build exclusion rules
 │   ├── .env.example            # Frontend environment template
 │   ├── AGENTS.md               # Frontend-specific engineering conventions
+│   ├── Dockerfile              # Multi-stage Next.js standalone container definition
 │   ├── README.md               # Frontend setup and architecture guide
 │   ├── eslint.config.mjs       # ESLint 9 configuration
 │   ├── next.config.ts          # Next.js 16 configuration
