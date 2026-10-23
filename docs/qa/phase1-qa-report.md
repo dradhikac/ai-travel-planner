@@ -25,7 +25,7 @@
 ## 2. Independent Verification Protocol
 
 Per QA rules:
-1. All verification was executed inside a fresh, isolated clone created outside the repository at `$env:TEMP\atc-qa-clone` (`C:\Users\Lenovo\AppData\Local\Temp\atc-qa-clone`) checked out to commit `ef7433c`.
+1. All verification was executed inside a fresh, isolated clone created outside the repository at `$env:TEMP\atc-qa-clone` (local temporary directory) checked out to commit `ef7433c`.
 2. No application source code in `backend/app/` or `frontend/src/` was modified.
 3. Clean installations (`pip install -r requirements-dev.txt` in a fresh venv and `npm ci`) were used to prevent leftover state contamination.
 4. The temporary clone directory was completely removed upon test completion.
