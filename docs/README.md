@@ -13,5 +13,7 @@ This directory contains architectural specifications, decision records, and oper
 - [Testing & QA Guide](testing.md): Automated test procedures, smoke test script usage, and manual browser verification checklist.
 - [Local Development Guide](local-development.md): Docker Compose PostgreSQL database setup, management commands, and operational warnings.
 - [Deployment Guide](deployment.md): Local container shell, image build procedures, runtime configuration, and pre-deployment decisions.
+- [Phase 1 Final QA Report](qa/phase1-qa-report.md): Independent verification results, test matrix, and candidate commit audit.
+- [Phase 1 Release Notes](releases/phase1.md): Scope deliverable inventory, inclusions, and known limitations for v0.1.0.
 - [Architecture Decision Records (ADRs)](decisions/0001-phase1-stack.md):
   - [ADR 0001: Phase 1 Core Stack and Modular Monolith](decisions/0001-phase1-stack.md)
