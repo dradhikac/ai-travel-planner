@@ -15,5 +15,7 @@ This directory contains architectural specifications, decision records, and oper
 - [Deployment Guide](deployment.md): Local container shell, image build procedures, runtime configuration, and pre-deployment decisions.
 - [Phase 1 Final QA Report](qa/phase1-qa-report.md): Independent verification results, test matrix, and candidate commit audit.
 - [Phase 1 Release Notes](releases/phase1.md): Scope deliverable inventory, inclusions, and known limitations for v0.1.0.
+- [Phase 2 & Phase 3 Branch Plan](phase2-3/branch-plan.md): Planned branch roadmap, retention policies, and manual merge sequencing.
+- [Phase 2 Data Contracts](phase2-3/data-contracts.md): Pydantic intake schemas, normalized provider models, error catalog, and API contracts.
 - [Architecture Decision Records (ADRs)](decisions/0001-phase1-stack.md):
   - [ADR 0001: Phase 1 Core Stack and Modular Monolith](decisions/0001-phase1-stack.md)
