@@ -1,3 +1,4 @@
+import Navbar from "@/components/Navbar";
 import BackendStatus from "@/components/BackendStatus";
 
 export default function Home() {
@@ -10,18 +11,7 @@ export default function Home() {
         Skip to content
       </a>
 
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-semibold text-lg tracking-tight text-slate-900 dark:text-slate-50">
-              AI Travel Concierge
-            </span>
-          </div>
-          <span className="inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-            Phase 1 Foundation
-          </span>
-        </div>
-      </header>
+      <Navbar />
 
       <main id="main-content" className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-12 sm:py-16">
         <div className="space-y-8 max-w-2xl">
