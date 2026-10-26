@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     ]
     DATABASE_URL: str | None = None
 
+    # Open-Meteo Provider Settings
+    PROVIDER_MODE: Literal["live", "mock"] = "live"
+    OPEN_METEO_GEOCODING_URL: str = "https://geocoding-api.open-meteo.com/v1/search"
+    OPEN_METEO_FORECAST_URL: str = "https://api.open-meteo.com/v1/forecast"
+    OPEN_METEO_CONNECT_TIMEOUT_SECONDS: float = 3.0
+    OPEN_METEO_READ_TIMEOUT_SECONDS: float = 5.0
+    OPEN_METEO_MAX_RETRIES: int = 1
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def empty_str_to_none(cls, v: str | None) -> str | None:

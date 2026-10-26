@@ -17,6 +17,12 @@ This document outlines the environment variable baseline and secret-handling pol
 | `POSTGRES_DB` | Local Database (`docker-compose.yml`) | No | `ai_travel_concierge` | `ai_travel_concierge` | No |
 | `POSTGRES_PORT` | Local Database (`docker-compose.yml`) | No | `5432` | `5433` | No |
 | `DATABASE_URL` | Backend (`backend/app/core/config.py`) | No | *None (Optional)* | `postgresql+psycopg://postgres:change-me-local-only@localhost:5432/ai_travel_concierge` | Yes (Dev) |
+| `PROVIDER_MODE` | Backend (`backend/app/core/config.py`) | No | `live` | `mock` | No |
+| `OPEN_METEO_GEOCODING_URL` | Backend (`backend/app/core/config.py`) | No | `https://geocoding-api.open-meteo.com/v1/search` | `https://custom.geocoding.example/v1/search` | No |
+| `OPEN_METEO_FORECAST_URL` | Backend (`backend/app/core/config.py`) | No | `https://api.open-meteo.com/v1/forecast` | `https://custom.forecast.example/v1/forecast` | No |
+| `OPEN_METEO_CONNECT_TIMEOUT_SECONDS` | Backend (`backend/app/core/config.py`) | No | `3.0` | `5.0` | No |
+| `OPEN_METEO_READ_TIMEOUT_SECONDS` | Backend (`backend/app/core/config.py`) | No | `5.0` | `10.0` | No |
+| `OPEN_METEO_MAX_RETRIES` | Backend (`backend/app/core/config.py`) | No | `1` | `2` | No |
 
 ### Notes on Variables
 - **`APP_ENV`**: Constrained to `development`, `test`, or `production`. Controls API documentation visibility (`/docs` disabled in production).
@@ -28,6 +34,12 @@ This document outlines the environment variable baseline and secret-handling pol
 - **`POSTGRES_DB`**: Default database name created on container startup.
 - **`POSTGRES_PORT`**: Host port bound to container port 5432 on `127.0.0.1`. Defaults to 5432.
 - **`DATABASE_URL`**: Optional connection URL for relational database persistence. Uses SQLAlchemy format (`postgresql+psycopg://USER:PASSWORD@HOST:PORT/DBNAME`). The application starts normally when unset.
+- **`PROVIDER_MODE`**: Determines whether external APIs (`live`) or deterministic offline recorded payloads (`mock`) are used.
+- **`OPEN_METEO_GEOCODING_URL`**: HTTP endpoint for Open-Meteo geocoding searches.
+- **`OPEN_METEO_FORECAST_URL`**: HTTP endpoint for Open-Meteo daily weather forecasts.
+- **`OPEN_METEO_CONNECT_TIMEOUT_SECONDS`**: Connect timeout in seconds for Open-Meteo requests.
+- **`OPEN_METEO_READ_TIMEOUT_SECONDS`**: Read timeout in seconds for Open-Meteo responses.
+- **`OPEN_METEO_MAX_RETRIES`**: Maximum number of bounded retries on transient connection timeouts, socket errors, and HTTP 5xx responses.
 
 ---
 
