@@ -242,6 +242,10 @@ class Itinerary(BaseModel):
 
     days: list[ItineraryDay] = Field(default_factory=list)
     summary: str = Field(..., max_length=500)
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Planning warnings, data origin notices, and constraints",
+    )
 
     @model_validator(mode="after")
     def validate_all_items_provenance(self) -> "Itinerary":

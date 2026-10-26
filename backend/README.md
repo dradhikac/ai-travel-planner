@@ -99,6 +99,20 @@ python -m alembic current
 
 ---
 
+## Phase 2 Domain Services
+
+### Deterministic Itinerary Generator (`app.services.itinerary`)
+
+Pure, deterministic rule-based day-by-day itinerary generation engine:
+- **Pace constants**: `relaxed` (2 items/day), `balanced` (3 items/day), `packed` (4 items/day).
+- **Generic interest templates**: Food, museums, nature, history, shopping, nightlife, and general civic exploration.
+- **Strict provenance**: Facts vs suggestions (`retrieved`, `generated_suggestion`, `estimate`, `unknown`).
+- **Weather-driven adaptation**: High rain probability (>= 40%) deterministically prioritizes indoor activities ahead of outdoor activities.
+- **Budget planning allocation**: Computes rough daily planning allocations labeled `estimate` (not price quotes), with flights and lodging marked `unknown`.
+- **Planning warnings**: Missing weather, out-of-horizon dates, mock data notices, low budget per day (< 50/person/day), and packed long-trip fatigue.
+
+---
+
 ## Architectural Boundaries
 
 - **Modular Monolith**: All application logic is organized in internal module seams.
