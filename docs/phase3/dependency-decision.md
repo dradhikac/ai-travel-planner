@@ -1,4 +1,4 @@
-﻿# Phase 3 Dependency Decision: LangGraph & LangChain-Core
+# Phase 3 Dependency Decision: LangGraph & LangChain-Core
 
 - **Date**: 2026-10-29
 - **Author**: AI Travel Concierge Planning & Documentation Team
@@ -124,3 +124,4 @@ To preserve the modular monolith architecture and adhere to solo-developer opera
 | **Rapid upstream release cadence** | Minor interface drift in `langgraph` minor versions | Enforce bounded semantic version constraint `<1.3.0` and pin minor versions in CI lockfiles. |
 | **Starlette / TestClient deprecation notice** | Informational deprecation warning during test runs | No runtime impact; TestClient remains fully functional with Starlette `1.10.0`. |
 | **Graph execution recursion loops** | Unbounded runtime execution on cyclic edge definitions | Mandatory `recursion_limit=25` on all graph invocations, backed by explicit `MAX_REPAIR_ATTEMPTS = 2` guards in state. |
+

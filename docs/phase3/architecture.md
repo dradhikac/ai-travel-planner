@@ -1,4 +1,4 @@
-﻿# Phase 3 Agent Architecture & Controlled Workflow Specification
+# Phase 3 Agent Architecture & Controlled Workflow Specification
 
 - **Date**: 2026-10-29
 - **Status**: **Approved Architectural Design**
