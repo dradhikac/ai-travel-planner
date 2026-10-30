@@ -7,7 +7,17 @@ from app.agent.errors import (
     ToolErrorCode,
 )
 from app.agent.state import Intent, RunStatus, TripState, create_fresh_trip_state
-from app.agent.tools import GeocodeArgs, ToolCall, ToolResult, ToolStatus, WeatherArgs
+from app.agent.tools import (
+    TOOL_REGISTRY,
+    GeocodeArgs,
+    ToolCall,
+    ToolResult,
+    ToolStatus,
+    WeatherArgs,
+    geocode_destination,
+    get_tool,
+    get_weather,
+)
 
 __all__ = [
     "AgentError",
@@ -15,6 +25,7 @@ __all__ = [
     "Intent",
     "RunStatus",
     "SecurityViolationError",
+    "TOOL_REGISTRY",
     "ToolCall",
     "ToolContractError",
     "ToolErrorCode",
@@ -23,4 +34,7 @@ __all__ = [
     "TripState",
     "WeatherArgs",
     "create_fresh_trip_state",
+    "geocode_destination",
+    "get_tool",
+    "get_weather",
 ]
