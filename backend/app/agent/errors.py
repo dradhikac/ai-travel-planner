@@ -16,6 +16,7 @@ class ToolErrorCode(StrEnum):
     INVALID_ARGUMENTS = "invalid_arguments"
     MALFORMED_RESPONSE = "malformed_response"
     NOT_FOUND = "not_found"
+    OUT_OF_FORECAST_RANGE = "out_of_forecast_range"
     EXECUTION_FAILED = "execution_failed"
     SKIPPED = "skipped"
 
