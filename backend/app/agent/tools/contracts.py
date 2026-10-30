@@ -199,3 +199,4 @@ class ToolCall(BaseModel):
     call_id: str | None = Field(
         default=None, description="Optional unique identifier for tracing"
     )
+

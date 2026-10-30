@@ -304,6 +304,7 @@ def test_enum_values_and_round_trips() -> None:
         ToolErrorCode.INVALID_ARGUMENTS,
         ToolErrorCode.MALFORMED_RESPONSE,
         ToolErrorCode.NOT_FOUND,
+        ToolErrorCode.OUT_OF_FORECAST_RANGE,
         ToolErrorCode.EXECUTION_FAILED,
         ToolErrorCode.SKIPPED,
     ]:
