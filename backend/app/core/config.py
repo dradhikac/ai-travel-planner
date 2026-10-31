@@ -1,10 +1,15 @@
 """Application configuration and typed settings."""
 
 from functools import lru_cache
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Phase 3 Agent Workflow Bounds Constants
+MAX_TOOL_CALLS: Final[int] = 4
+MAX_REPAIR_ATTEMPTS: Final[int] = 2
+AGENT_RECURSION_LIMIT: Final[int] = 25
 
 
 class Settings(BaseSettings):
@@ -31,6 +36,11 @@ class Settings(BaseSettings):
     OPEN_METEO_CONNECT_TIMEOUT_SECONDS: float = 3.0
     OPEN_METEO_READ_TIMEOUT_SECONDS: float = 5.0
     OPEN_METEO_MAX_RETRIES: int = 1
+
+    # Phase 3 Agent Workflow Bounds and Guardrails
+    AGENT_MAX_TOOL_CALLS: int = MAX_TOOL_CALLS
+    AGENT_MAX_REPAIR_ATTEMPTS: int = MAX_REPAIR_ATTEMPTS
+    AGENT_RECURSION_LIMIT: int = AGENT_RECURSION_LIMIT
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
