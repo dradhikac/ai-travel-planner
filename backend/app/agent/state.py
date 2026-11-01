@@ -7,7 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.agent.tools import ToolCall, ToolResult
-from app.schemas.trip import Itinerary, TripRequest, TripResponse
+from app.schemas.trip import Itinerary, ToolActivity, TripRequest, TripResponse
 
 FORBIDDEN_SECRET_KEYS: Final[tuple[str, ...]] = (
     "api_key",
@@ -144,6 +144,10 @@ class TripState(BaseModel):
     final_response: TripResponse | None = Field(
         default=None,
         description="Final complete TripResponse document when workflow succeeds",
+    )
+    tool_activity: list[ToolActivity] = Field(
+        default_factory=list,
+        description="Sanitized audit entries of tool invocations for client UI",
     )
     warnings: list[str] = Field(
         default_factory=list,

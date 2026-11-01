@@ -39,9 +39,10 @@ class ModelGateway(Protocol):
     def generate_clarification(
         self,
         missing_fields: list[str],
+        contradictions: list[str] | None = None,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """Generate a polite, targeted clarification question for missing fields."""
+        """Generate targeted question for missing fields and contradictions."""
         ...
 
 
@@ -126,6 +127,14 @@ class RuleBasedGateway:
             else:
                 for city in self.KNOWN_DESTINATIONS:
                     if re.search(rf"\b{city}\b", user_message, re.IGNORECASE):
+                        if fields.get("origin", "").lower() == city.lower():
+                            continue
+                        if re.search(
+                            rf"\b(?:from|departing|leaving)\s+{city}\b",
+                            user_message,
+                            re.IGNORECASE,
+                        ):
+                            continue
                         fields["destination"] = city
                         break
 
@@ -147,8 +156,35 @@ class RuleBasedGateway:
                 fields["start_date"] = iso_dates[0]
             if "end_date" not in fields:
                 fields["end_date"] = iso_dates[1]
-        elif len(iso_dates) == 1 and "start_date" not in fields:
-            fields["start_date"] = iso_dates[0]
+        elif len(iso_dates) == 1:
+            single_date = iso_dates[0]
+            is_return = bool(
+                re.search(
+                    rf"\b(?:returning|return|until|through|ending|ends)\s+(?:on\s+)?{single_date}\b",
+                    user_message,
+                    re.IGNORECASE,
+                )
+            )
+            is_depart = bool(
+                re.search(
+                    rf"\b(?:departing|leaving|starting|starts|from)\s+(?:on\s+)?{single_date}\b",
+                    user_message,
+                    re.IGNORECASE,
+                )
+            )
+            if is_return:
+                if "end_date" not in fields:
+                    fields["end_date"] = single_date
+            elif is_depart:
+                if "start_date" not in fields:
+                    fields["start_date"] = single_date
+            else:
+                if "start_date" not in fields and fields.get("end_date") != single_date:
+                    fields["start_date"] = single_date
+                elif (
+                    "end_date" not in fields and fields.get("start_date") != single_date
+                ):
+                    fields["end_date"] = single_date
 
         # 4. Party Size
         if "party_size" not in fields:
@@ -161,6 +197,19 @@ class RuleBasedGateway:
                     fields["party_size"] = int(party_match.group(1))
                 except ValueError:
                     pass
+            elif re.search(r"\b(?:solo|alone|just me|by myself)\b", msg_lower):
+                fields["party_size"] = 1
+            elif re.search(r"\bcouple\b", msg_lower):
+                fields["party_size"] = 2
+            elif re.search(r"\b(?:family|group|party)\s+of\s+(\d{1,2})\b", msg_lower):
+                fam_match = re.search(
+                    r"\b(?:family|group|party)\s+of\s+(\d{1,2})\b", msg_lower
+                )
+                if fam_match:
+                    try:
+                        fields["party_size"] = int(fam_match.group(1))
+                    except ValueError:
+                        pass
 
         # 5. Budget Amount & Currency
         if "budget_amount" not in fields:
@@ -250,34 +299,72 @@ class RuleBasedGateway:
         # 4. Default: Itinerary planning
         return Intent.ITINERARY_PLANNING
 
+    FIELD_EXPLANATIONS: dict[str, tuple[str, str]] = {
+        "destination": (
+            "destination city",
+            "needed to research attractions and weather",
+        ),
+        "origin": ("departure location", "needed to plan your travel route"),
+        "dates": (
+            "travel dates",
+            "needed to schedule daily activities and check weather",
+        ),
+        "start_date": ("departure date", "needed to schedule daily activities"),
+        "end_date": ("return date", "needed to determine trip duration"),
+        "party_size": ("number of travelers", "needed to tailor group activities"),
+    }
+
     def generate_clarification(
         self,
         missing_fields: list[str],
+        contradictions: list[str] | None = None,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """Construct a focused clarification query for missing travel parameters."""
-        if not missing_fields:
-            return "Could you provide more details about your travel plans?"
+        """Construct ONE concise question listing every missing/contradictory field."""
+        missing_items: list[str] = []
+        for f in missing_fields:
+            desc, reason = self.FIELD_EXPLANATIONS.get(
+                f, (f.replace("_", " "), "needed to plan your trip")
+            )
+            missing_items.append(f"{desc} ({reason})")
 
-        clean_fields = [f.replace("_", " ") for f in missing_fields]
-        if len(clean_fields) == 1:
-            field = clean_fields[0]
-            if "destination" in field:
-                return "Where would you like to travel?"
-            if "origin" in field:
-                return "Where will you be departing from?"
-            if "date" in field:
-                return "What dates are you planning your trip for?"
-            return f"Could you please specify your travel {field}?"
+        contra_items = [
+            c.strip().rstrip(".") for c in (contradictions or []) if c.strip()
+        ]
 
-        if len(clean_fields) == 2:
-            return (
-                f"Could you please provide your {clean_fields[0]} "
-                f"and {clean_fields[1]}?"
+        if not missing_items and not contra_items:
+            return "Could you please provide more details about your travel plans?"
+
+        if missing_items and not contra_items:
+            if len(missing_items) == 1:
+                return f"Could you please specify your {missing_items[0]}?"
+            if len(missing_items) == 2:
+                return (
+                    f"Could you please specify your {missing_items[0]} "
+                    f"and {missing_items[1]}?"
+                )
+            formatted = ", ".join(missing_items[:-1]) + f", and {missing_items[-1]}"
+            return f"Could you please specify your {formatted}?"
+
+        if contra_items and not missing_items:
+            joined_contra = "; ".join(contra_items)
+            return f"Could you please clarify your travel details? {joined_contra}."
+
+        # Both missing fields and contradictions
+        if len(missing_items) == 1:
+            missing_phrase = missing_items[0]
+        elif len(missing_items) == 2:
+            missing_phrase = f"{missing_items[0]} and {missing_items[1]}"
+        else:
+            missing_phrase = (
+                ", ".join(missing_items[:-1]) + f", and {missing_items[-1]}"
             )
 
-        formatted_list = ", ".join(clean_fields[:-1]) + f", and {clean_fields[-1]}"
-        return f"Could you please specify your {formatted_list} to help plan your trip?"
+        joined_contra = "; ".join(contra_items)
+        return (
+            f"Could you please specify your {missing_phrase}, "
+            f"and clarify that {joined_contra}?"
+        )
 
 
 class ScriptedGateway:
@@ -325,6 +412,7 @@ class ScriptedGateway:
     def generate_clarification(
         self,
         missing_fields: list[str],
+        contradictions: list[str] | None = None,
         context: dict[str, Any] | None = None,
     ) -> str:
         self.clarification_calls.append(list(missing_fields))
@@ -332,4 +420,7 @@ class ScriptedGateway:
             raise self.exception
         if self.scripted_clarification is not None:
             return self.scripted_clarification
-        return f"Please specify: {', '.join(missing_fields)}"
+        parts = [f"{f} (needed)" for f in missing_fields]
+        if contradictions:
+            parts.extend(contradictions)
+        return f"Please specify: {', '.join(parts)}"

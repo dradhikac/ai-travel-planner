@@ -257,6 +257,7 @@ def test_weather_tool_not_called_when_geocoding_empty(
             "origin": "London",
             "start_date": "2026-11-01",
             "end_date": "2026-11-03",
+            "party_size": 1,
         },
     )
 

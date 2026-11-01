@@ -10,12 +10,14 @@ from app.agent.gateway import ModelGateway, RuleBasedGateway, ScriptedGateway
 from app.agent.graph import compile_agent_graph, create_agent_graph, run_workflow
 from app.agent.nodes import (
     ask_clarification,
+    build_tool_activity,
     check_required_fields,
     draft_itinerary,
     execute_tools,
     parse_request,
     plan_tool_calls,
     respond,
+    sanitize_url,
     validate_itinerary,
 )
 from app.agent.state import Intent, RunStatus, TripState, create_fresh_trip_state
@@ -30,6 +32,7 @@ from app.agent.tools import (
     get_tool,
     get_weather,
 )
+from app.schemas.trip import ToolActivity
 
 __all__ = [
     "AgentError",
@@ -45,10 +48,12 @@ __all__ = [
     "ToolContractError",
     "ToolErrorCode",
     "ToolResult",
+    "ToolActivity",
     "ToolStatus",
     "TripState",
     "WeatherArgs",
     "ask_clarification",
+    "build_tool_activity",
     "check_required_fields",
     "compile_agent_graph",
     "create_agent_graph",
@@ -62,5 +67,6 @@ __all__ = [
     "plan_tool_calls",
     "respond",
     "run_workflow",
+    "sanitize_url",
     "validate_itinerary",
 ]
