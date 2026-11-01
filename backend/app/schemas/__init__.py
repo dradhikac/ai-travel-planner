@@ -20,6 +20,7 @@ from app.schemas.trip import (
     ItineraryItem,
     PacePreference,
     TimeOfDay,
+    ToolActivity,
     TripRequest,
     TripResponse,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "Provenance",
     "SourceInfo",
     "TimeOfDay",
+    "ToolActivity",
     "TripRequest",
     "TripResponse",
     "VersionResponse",

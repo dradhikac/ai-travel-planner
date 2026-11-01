@@ -259,6 +259,36 @@ class Itinerary(BaseModel):
         return self
 
 
+class ToolActivity(BaseModel):
+    """Sanitized human-readable audit entry of a tool execution for client response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool_label: str = Field(..., description="Human-readable tool label")
+    status: str = Field(..., description="Sanitized execution status outcome")
+    source: str = Field(..., description="Sanitized source provider name or base URL")
+    fetched_at: datetime | None = Field(
+        default=None, description="UTC timestamp when data was retrieved"
+    )
+    data_origin: str = Field(
+        default="none",
+        description="Origin classification of data payload (live, mock, or none)",
+    )
+    explanation: str = Field(
+        ..., description="One-line safe explanation of why the tool ran"
+    )
+
+    @field_validator("fetched_at", mode="after")
+    @classmethod
+    def ensure_utc_timezone(cls, v: datetime | None) -> datetime | None:
+        """Ensure fetched_at timestamp is timezone-aware UTC."""
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
+
+
 class TripResponse(BaseModel):
     """Complete trip response contract including itinerary and weather."""
 
@@ -269,6 +299,9 @@ class TripResponse(BaseModel):
     itinerary: Itinerary
     weather: WeatherSummary | None = None
     sources: list[SourceInfo] = Field(default_factory=list)
+    tool_activity: list[ToolActivity] = Field(
+        default_factory=list, description="Sanitized tool execution audit entries"
+    )
     warnings: list[str] = Field(default_factory=list)
     created_at: datetime
 
