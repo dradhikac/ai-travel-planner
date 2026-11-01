@@ -207,17 +207,50 @@ class ModelGateway(Protocol):
 
 ---
 
-## 8. Clarification Policy & Safe Defaults
+## 8. Clarification Policy, Safe Defaults & Failure Handling
 
-The agent strictly follows a polite, human-centered clarification policy:
+The agent strictly enforces honest, human-centered clarification and failure handling policies:
 
-1. **One Question at a Time**: Never overwhelm the traveler with a multi-part questionnaire.
-2. **Actionable Options**: When asking for clarification, provide suggested choices (e.g. *"Did you mean Paris, France or Paris, Texas?"*).
-3. **Safe Fallback Defaults**:
-   - If `pace` is omitted -> defaults to `PacePreference.BALANCED`.
-   - If `party_size` is omitted -> defaults to `1`.
-   - If `interests` are omitted -> defaults to `["general_sightseeing"]`.
-   - If `start_date` or `destination` is omitted -> **Clarification Required** (cannot guess dates or locations).
+### 8.1. Essential Fields & Single-Question Clarification
+- **Essential Fields**: All required fields of `TripRequest` must be known: `origin`, `destination`, `start_date`, `end_date`, and `party_size`.
+- **Contradiction Detection**: Cross-field contradictions trigger clarification:
+  - Reversed dates (`end_date < start_date`)
+  - Identical origin and destination (`origin.casefold() == destination.casefold()`)
+  - Dates in the past (`start_date < today`)
+  - Trip duration exceeding 30 days (`duration > 30`)
+  - Invalid party size (`party_size < 1` or `party_size > 20`)
+  - Unparseable date formats
+- **Targeted Question**: `ask_clarification` generates **ONE concise question** that enumerates every missing or contradictory field and explains why each is required.
+- **Strict Prohibition**: The workflow NEVER invents dates, origin, party size, or external provider facts.
+
+### 8.2. Permitted Safe Defaults
+Safe defaults are allowed **ONLY** for non-essential planning preferences:
+- `pace` -> defaults to `balanced`
+- `interests` -> defaults to `[]` (empty list for general recommendations)
+- `budget` -> defaults to `None` (costs categorized as `unknown`)
+
+Every applied default is explicitly announced in the response `warnings` array.
+
+### 8.3. Stateless Clarification Multi-turn
+- Multi-turn interaction is strictly stateless: the client resends accumulated `known_fields` across request turns.
+- No persistent checkpointer or database state is required between clarification turns.
+
+### 8.4. Normalized Failure Policy
+- **Geocoding Empty**: Status becomes `failed`; returns a clear message stating the destination could not be found with a suggestion to rephrase or verify spelling.
+- **Geocoding Error / Timeout / Rate Limited**: Status becomes `failed`; returns a safe retry message without leaking internal URLs or error messages.
+- **Weather Failure / Empty / Out-of-Forecast-Range**: Status becomes `partial`; produces a valid itinerary synthesized **WITHOUT weather statements** (`weather=None`), with an explicit explanatory warning.
+- **All Tools OK**: Status becomes `completed`.
+- **Truthfulness Invariant**: A failed tool is never shown as a successful live result. Failed tool sources are excluded from `TripResponse.sources`, and failed tool data origin is strictly marked `none`.
+
+### 8.5. Tool Activity Audit Entries
+Every executed or scheduled tool call produces a sanitized `ToolActivity` entry:
+- `tool_label`: Human-readable name (e.g. "Destination Geocoding", "Weather Forecast").
+- `status`: Execution outcome status (`ok`, `empty`, `error`, `timeout`, `rate_limited`, `skipped`).
+- `source`: Sanitized provider name or base URL. All URLs have query parameters and fragment anchors stripped (`sanitize_url`).
+- `fetched_at`: Timezone-aware UTC timestamp.
+- `data_origin`: Origin classification (`live`, `mock`, `fallback`, `none`).
+- `explanation`: One-line safe explanation of why the tool was invoked.
+- **Sanitization Guarantee**: Zero raw errors, zero stack traces, zero chain-of-thought tokens, and zero API keys or credentials.
 
 ---
 

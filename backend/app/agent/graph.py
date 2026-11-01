@@ -25,6 +25,7 @@ from app.agent.nodes import (
     validate_itinerary,
 )
 from app.agent.state import Intent, RunStatus, TripState, create_fresh_trip_state
+from app.agent.tools.contracts import ToolStatus
 from app.agent.tools.registry import TOOL_REGISTRY
 from app.core.config import (
     AGENT_RECURSION_LIMIT,
@@ -80,10 +81,10 @@ def create_agent_graph(
 
     # 2. Define conditional edge routing logic
     def _route_after_check_fields(state: TripState) -> str:
-        """Route to clarification if fields missing, respond if guard, or plan."""
+        """Route to clarification if fields missing/contradictory, else proceed."""
         if state.step_count >= max_steps:
             return "respond"
-        if state.missing_fields:
+        if state.missing_fields or state.contradictions:
             return "ask_clarification"
         if state.intent == Intent.UNSUPPORTED:
             return "respond"
@@ -98,10 +99,18 @@ def create_agent_graph(
         return "execute_tools"
 
     def _route_after_execute_tools(state: TripState) -> str:
-        """Route to draft_itinerary for full planning, or respond for discovery."""
+        """Route to draft_itinerary for planning, or respond for discovery/failure."""
         if state.step_count >= max_steps:
             return "respond"
         if state.intent == Intent.DESTINATION_DISCOVERY:
+            return "respond"
+        geo_res = next(
+            (r for r in state.tool_results if r.tool_name == "geocode_destination"),
+            None,
+        )
+        if geo_res is not None and (
+            geo_res.status != ToolStatus.OK or not geo_res.data
+        ):
             return "respond"
         return "draft_itinerary"
 
