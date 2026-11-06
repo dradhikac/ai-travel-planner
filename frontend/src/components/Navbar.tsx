@@ -14,6 +14,12 @@ export function Navbar(): React.ReactElement {
           </Link>
           <nav aria-label="Main Navigation" className="flex items-center gap-4 text-sm font-medium">
             <Link
+              href="/assistant"
+              className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              Assistant
+            </Link>
+            <Link
               href="/plan"
               className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
             >
@@ -28,7 +34,7 @@ export function Navbar(): React.ReactElement {
           </nav>
         </div>
         <span className="inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-          Phase 2
+          Phase 3
         </span>
       </div>
     </header>
