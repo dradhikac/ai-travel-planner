@@ -116,3 +116,5 @@ export async function listTrips(
   const data = await apiClient<unknown>(`/api/trips?${query.toString()}`);
   return validateTripListResponse(data);
 }
+
+export { planWithAssistant, validateAssistantPlanResponse } from "@/lib/api/assistant";
