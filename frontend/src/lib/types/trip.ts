@@ -76,12 +76,53 @@ export interface Itinerary {
   warnings?: string[];
 }
 
+export interface ToolActivity {
+  tool_label: string;
+  status: string;
+  source: string;
+  fetched_at?: string | null;
+  data_origin: "live" | "mock" | "fallback" | "none" | string;
+  explanation: string;
+}
+
+export type AssistantRunStatus =
+  | "needs_clarification"
+  | "clarification_required"
+  | "completed"
+  | "partial"
+  | "failed";
+
+export interface AssistantClarification {
+  field?: string;
+  question: string;
+}
+
+export interface AssistantPlanRequest {
+  message: string;
+  known_fields?: Record<string, unknown>;
+  save?: boolean;
+}
+
+export interface AssistantPlanResponse {
+  status: AssistantRunStatus;
+  request_id: string;
+  trip?: TripResponse | null;
+  clarification_question?: string | null;
+  clarification?: AssistantClarification | null;
+  missing_fields?: string[];
+  known_fields?: Record<string, unknown>;
+  tool_activity?: ToolActivity[];
+  warnings?: string[];
+  message?: string | null;
+}
+
 export interface TripResponse {
   id: string;
   request: TripRequest;
   itinerary: Itinerary;
   weather: WeatherSummary | null;
   sources: SourceInfo[];
+  tool_activity?: ToolActivity[];
   warnings: string[];
   created_at: string;
 }
