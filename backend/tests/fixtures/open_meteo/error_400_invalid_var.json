@@ -1,0 +1,4 @@
+{
+  "error": true,
+  "reason": "Cannot initialize WeatherVariable from invalid String value invalid_var for key daily"
+}
