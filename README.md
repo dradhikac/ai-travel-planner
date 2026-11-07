@@ -2,7 +2,7 @@
 
 AI Travel Concierge is an AI-powered travel research and planning web application that assists travelers in discovering destinations, researching points of interest, and organizing itineraries. The application is strictly a travel discovery and planning assistant, **NOT a booking engine**. It never claims to make reservations, execute transactions, process payments, or book flights and accommodations.
 
-**Current Status**: **Phase 1 Foundation Complete**. Phase 1 establishes the production-grade application scaffolding, backend FastAPI service, frontend Next.js application shell, optional containerized PostgreSQL with Alembic migrations, test suites, and GitHub Actions CI. Phase 2 (LLM orchestration and travel integrations) is planned.
+**Current Status**: **Phase 1, Phase 2, and Phase 3 Complete (Release Candidate v0.3.0-rc1)**. The repository includes a production-grade FastAPI backend, a Next.js 16 (React 19) frontend shell, a deterministic itinerary generation engine with Open-Meteo meteorological integration, a controlled LangGraph agent workflow with typed state and clarification loops, an interactive Assistant UI with tool activity audits, PostgreSQL containerization, and comprehensive automated test suites.
 
 ---
 
@@ -13,21 +13,23 @@ Travel planning today is tedious, inefficient, and fragmented:
 - **Unsupported & Hallucinated Chatbot Answers**: Generic LLM chatbots often invent outdated business hours, fabricate non-existent transport connections, or lack verified citations.
 - **High-Pressure Booking Funnels**: Most commercial travel apps prioritize aggressive reservation commissions, ads, and urgency nudges over honest, personalized research and exploratory planning.
 
-AI Travel Concierge aims to resolve these issues by providing a structured, verifiable planning workspace powered by specialized agents that surface actionable, context-aware travel recommendations without sales gimmicks.
+AI Travel Concierge resolves these issues by providing a structured, verifiable planning workspace powered by specialized workflows that surface actionable, context-aware travel recommendations with provenance tracking and transparent failure handling.
 
 ---
 
-## 2. Implemented in Phase 1 vs. Planned
+## 2. Implemented vs. Planned
 
-| Area | Implemented in Phase 1 (Foundation) | Planned (Future Phases) |
+| Area | Implemented (Phases 1–3) | Planned (Future Phases) |
 | :--- | :--- | :--- |
-| **Backend Service** | FastAPI application factory, system health (`GET /health`), version metadata (`GET /api/version`), DB readiness (`GET /health/db`), uniform error contract (`{"error": {"code", "message"}}`). | LangGraph / LangChain agent orchestration, dynamic tool calling, LLM inference endpoints. |
-| **Frontend UI** | Next.js 16 (App Router) + React 19 shell, Tailwind CSS styling, real-time `BackendStatus` indicator with offline recovery and accessible states. | Interactive map exploration, itinerary drag-and-drop builder, chat interface, multi-turn travel research assistant. |
-| **Database & Migrations** | Local PostgreSQL 16 container via Docker Compose, SQLAlchemy 2.0 base and session factory, Alembic 1.14 baseline revision (`0001_baseline`). Optional at runtime (app starts without DB). | Domain models (trips, destinations, points of interest, user profiles), saved itinerary persistence. |
-| **External Travel APIs** | None (tests use deterministic mocks; zero network egress). | Amadeus, Google Places, TripAdvisor, Skyscanner, or weather APIs. |
-| **Booking & Commerce** | **Explicitly Out of Scope**: Never claims or performs bookings, ticketing, payments, or reservations. | Out of scope permanently. |
-| **Quality & Automation** | Pytest unit and CORS integration tests, Vitest component test harness, standalone smoke test script, GitHub Actions CI workflow. | End-to-end Playwright tests, automated staging deployments, performance benchmarking. |
-| **Deployment & Containers** | Local Docker container shell (`Dockerfile` and `.dockerignore` for backend and frontend, non-root users, standalone Next.js build), local image verification. | Cloud hosting provider, remote deployment pipelines, Kubernetes orchestration. |
+| **Backend Service** | FastAPI application factory, system health (`GET /health`), version metadata (`GET /api/version`), DB readiness (`GET /health/db`), uniform error contract (`{"error": {"code", "message"}}`). | Multi-destination routing endpoints, user-specific trip sharing. |
+| **Agent Orchestration** | Controlled LangGraph state machine (`app/agent/`), typed `TripState`, step-count guard (`MAX_STEPS = 25`), sequential execution limits (`MAX_TOOL_CALLS = 5`), rule-based intent classification (`RuleBasedGateway`), clarification loop for missing parameters. | Optional live LLM provider adapters (Anthropic Claude, OpenAI, Gemini) behind the `ModelGateway` protocol. |
+| **Typed Tools** | `geocode_destination` (resolves coordinates, timezone, admin region) and `get_weather` (daily meteorological summaries). Resilient offline fixtures, sanitized URLs, and timeout/rate-limit policies. | Live points-of-interest search, transit scheduling, route elevation profiles. |
+| **Itinerary Generator** | Deterministic rule-based day-by-day generator (`app/services/itinerary.py`), pacing matching (relaxed, balanced, packed), interests matching, daily weather integration, and strict provenance tagging (`RETRIEVED` vs `SYNTHESIZED`). | Drag-and-drop manual itinerary reordering, user notes persistence. |
+| **Frontend UI** | Next.js 16 (App Router) + React 19 + Tailwind CSS. Real-time `BackendStatus` indicator, Saved Trips page (`/trips`), Trip Details page (`/trips/[id]`), interactive Assistant page (`/assistant`), and expandable `ToolActivityPanel`. | Interactive Leaflet/Mapbox destination maps, dark/light theme toggle. |
+| **Database & Migrations** | Local PostgreSQL 16 container via Docker Compose, SQLAlchemy 2.0 base and session factory, Alembic baseline revision (`0001_baseline.py`). Optional at runtime (app starts offline without DB). | Production managed PostgreSQL deployment, automated backup schedules. |
+| **Authentication & Users** | Single-user local development mode (no login required). | Multi-user authentication, JWT/OAuth sessions, user profiles. |
+| **Booking & Commerce** | **Permanently Out of Scope**: Never claims or performs bookings, ticketing, payments, or reservations. | Permanently out of scope. |
+| **Testing & Quality** | 257 backend Pytest tests (including 24 adversarial robustness tests), 83 frontend Vitest component tests, standalone smoke test script, GitHub Actions CI. | End-to-end Playwright tests against live browser instances. |
 
 ---
 
@@ -36,450 +38,323 @@ AI Travel Concierge aims to resolve these issues by providing a structured, veri
 AI Travel Concierge is designed as a **modular monolith** with clean architectural seams between the user-facing web tier, the core API service, and backing data stores:
 
 ```text
-+-----------------------------------------------------------+
-|                       Web Browser                         |
-+-----------------------------------------------------------+
-                             |
-                   HTTP / JSON (Port 3000)
-                             v
-+-----------------------------------------------------------+
-|              Frontend (Next.js 16 / React 19)             |
-|  - App Router (src/app/)                                  |
-|  - Typed API Client Wrapper (src/lib/api/client.ts)       |
-|  - BackendStatus Component (src/components/BackendStatus) |
-+-----------------------------------------------------------+
-                             |
-             REST API / CORS (Port 8000)
-                             v
-+-----------------------------------------------------------+
-|               Backend (FastAPI / Pydantic)                |
-|  - Application Factory & Routes (app/api/routes/)         |
-|  - Typed Settings & Error Contract (app/core/)            |
-|  - Lazy SQLAlchemy Engine & Session (app/db/)             |
-+-----------------------------------------------------------+
-                             |
-         SQLAlchemy / psycopg (Port 5432 / 5433)
-                             v
-+-----------------------------------------------------------+
-|           Database (PostgreSQL 16 via Docker)             |
-|  - Container: ai_travel_concierge_db                      |
-|  - Schema Migrations via Alembic                          |
-+-----------------------------------------------------------+
++---------------------------------------------------------------------------------+
+|                                   Web Browser                                   |
++---------------------------------------------------------------------------------+
+                                         |
+                               HTTP / JSON (Port 3000)
+                                         v
++---------------------------------------------------------------------------------+
+|                        Frontend (Next.js 16 / React 19)                         |
+|  - App Router:                                                                  |
+|      * /            -> Home & BackendStatus Health Indicator                    |
+|      * /assistant   -> Conversational Travel Planner & ToolActivityPanel        |
+|      * /trips       -> Saved Trips List & Trip Details Views                    |
+|  - Typed Client Wrappers (src/lib/api/) & Vitest Test Harness                   |
++---------------------------------------------------------------------------------+
+                                         |
+                            REST API / CORS (Port 8000)
+                                         v
++---------------------------------------------------------------------------------+
+|                          Backend (FastAPI / Pydantic)                           |
+|  - API Route Handlers (app/api/routes/)                                         |
+|  - LangGraph State Machine (app/agent/graph.py):                                |
+|      [parse_request] -> [check_required_fields] -> [ask_clarification]          |
+|      [plan_tool_calls] -> [execute_tools] -> [draft_itinerary] -> [respond]     |
+|  - Typed Research Tools (app/agent/tools/):                                     |
+|      * geocode_destination (Open-Meteo Geocoding)                               |
+|      * get_weather (Open-Meteo Daily Meteorological Forecast)                   |
+|  - Deterministic Itinerary Engine (app/services/itinerary.py)                   |
+|  - Error Contract & Logging Redaction (app/core/)                               |
++---------------------------------------------------------------------------------+
+                                         |
+                      SQLAlchemy / psycopg (Port 5432 / 5433)
+                                         v
++---------------------------------------------------------------------------------+
+|                       Database (PostgreSQL 16 via Docker)                       |
+|  - Container: ai_travel_concierge_db (ai_travel_concierge)                      |
+|  - Schema Migrations via Alembic (alembic/)                                     |
++---------------------------------------------------------------------------------+
 ```
 
 ### Repository Layout
-
-The actual tracked repository structure (derived from `git ls-files`):
 
 ```text
 ai-travel-concierge/
 ├── .editorconfig               # Workspace code formatting rules
 ├── .env.example                # Root environment template (Docker compose database)
-├── .gitattributes              # Line-ending and Git attributes normalization
+├── .gitattributes              # Line-ending normalization rules
 ├── .gitignore                  # Git tracked file exclusion rules
-├── AGENTS.md                   # Agent guidelines, boundaries, and rules
+├── AGENTS.md                   # Agent guidelines, boundaries, and conventions
 ├── CONTRIBUTING.md             # Solo-developer workflow guidelines
 ├── README.md                   # Project overview, setup, and documentation
 ├── docker-compose.yml          # Local PostgreSQL 16 container service
 ├── .github/
 │   └── workflows/
-│       └── ci.yml              # GitHub Actions CI pipeline (backend, frontend, hygiene)
+│       └── ci.yml              # GitHub Actions CI pipeline
 ├── backend/
 │   ├── .dockerignore           # Container build exclusion rules
 │   ├── .env.example            # Backend environment template
-│   ├── Dockerfile              # Python 3.11-slim production container definition
-│   ├── README.md               # Backend-specific architecture and setup guide
-│   ├── alembic.ini             # Alembic configuration (no credentials)
+│   ├── Dockerfile              # Python 3.11-slim container definition
 │   ├── pyproject.toml          # Python tool configuration (Ruff, Pytest)
-│   ├── requirements.txt        # Production Python dependencies
-│   ├── requirements-dev.txt    # Development and testing Python dependencies
-│   ├── alembic/
-│   │   ├── env.py              # Dynamic migration runner reading application settings
-│   │   ├── script.py.mako      # Alembic migration script template
-│   │   └── versions/
-│   │       └── 0001_baseline.py# Initial empty baseline revision
+│   ├── requirements.txt        # Production dependencies (FastAPI, LangGraph, etc.)
+│   ├── requirements-dev.txt    # Testing dependencies (Pytest, Ruff)
+│   ├── alembic/                # Database migrations
 │   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py             # FastAPI application factory and lifespan handler
-│   │   ├── version.py          # Application semantic version constant
-│   │   ├── api/
-│   │   │   ├── __init__.py
-│   │   │   └── routes/
-│   │   │       ├── __init__.py
-│   │   │       ├── health.py   # Health and database readiness endpoints
-│   │   │       └── version.py  # Version metadata endpoint
-│   │   ├── core/
-│   │   │   ├── __init__.py
-│   │   │   ├── config.py       # Pydantic Settings configuration loader
-│   │   │   ├── errors.py       # Global exception handlers and error contracts
-│   │   │   └── logging.py      # Structured application logging configuration
-│   │   ├── db/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py         # DeclarativeBase SQLAlchemy model base
-│   │   │   └── session.py      # Lazy engine and get_session FastAPI dependency
-│   │   └── schemas/
-│   │       ├── __init__.py
-│   │       ├── errors.py       # Pydantic error response contract schemas
-│   │       ├── health.py       # Pydantic health check schemas
-│   │       └── version.py      # Pydantic version response schemas
-│   └── tests/
-│       ├── conftest.py         # Test fixtures and shared client factories
-│       ├── test_config.py      # Settings and environment validation tests
-│       ├── test_db_health.py   # Database readiness and connection probe tests
-│       ├── test_error_contract.py# JSON error shape contract verification tests
-│       ├── test_errors.py      # Specific error handler unit tests
-│       ├── test_health.py      # Health route unit tests
-│       ├── test_integration_cors.py # CORS header reflection and rejection tests
-│       └── test_version.py     # Version route unit tests
-├── docs/
-│   ├── README.md               # Documentation directory index
-│   ├── architecture.md         # Architecture overview and design seams
-│   ├── deployment.md           # Local container build, run, and pre-deploy guide
-│   ├── environment.md          # Exhaustive environment variable specification
-│   ├── local-development.md    # Comprehensive local developer manual
-│   ├── testing.md              # Testing guide, smoke testing, and QA checklists
-│   └── decisions/
-│       └── 0001-phase1-stack.md# Architecture Decision Record: Phase 1 tech stack
+│   │   ├── main.py             # FastAPI application factory
+│   │   ├── agent/              # LangGraph state machine & typed tools
+│   │   │   ├── graph.py        # Graph assembly & run_workflow entrypoint
+│   │   │   ├── nodes.py        # Pure workflow execution nodes & step guards
+│   │   │   ├── state.py        # Typed TripState schema & secret key validation
+│   │   │   ├── gateway.py      # RuleBasedGateway & ModelGateway protocol
+│   │   │   └── tools/          # Typed geocoding and weather tools
+│   │   ├── core/               # Typed settings, error contracts, logging
+│   │   ├── db/                 # SQLAlchemy session and engine factory
+│   │   ├── schemas/            # Pydantic schemas (TripRequest, Itinerary, SourceInfo)
+│   │   └── services/           # Deterministic itinerary generator & weather adapter
+│   └── tests/                  # Pytest unit, workflow, and adversarial test suites
 ├── frontend/
-│   ├── .dockerignore           # Container build exclusion rules
-│   ├── .env.example            # Frontend environment template
-│   ├── AGENTS.md               # Frontend-specific engineering conventions
-│   ├── Dockerfile              # Multi-stage Next.js standalone container definition
-│   ├── README.md               # Frontend setup and architecture guide
-│   ├── eslint.config.mjs       # ESLint 9 configuration
-│   ├── next.config.ts          # Next.js 16 configuration
-│   ├── package.json            # Node.js dependencies and script definitions
-│   ├── package-lock.json       # Deterministic npm dependency lockfile
-│   ├── tsconfig.json           # TypeScript strict configuration
-│   ├── vitest.config.ts        # Vitest test runner configuration
+│   ├── package.json            # Node.js dependencies (Next.js 16, React 19)
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── favicon.ico
-│   │   │   ├── globals.css     # Global styles and Tailwind CSS directives
-│   │   │   ├── layout.tsx      # Root HTML layout and metadata
-│   │   │   └── page.tsx        # Landing page rendering BackendStatus card
-│   │   ├── components/
-│   │   │   └── BackendStatus.tsx# Real-time backend status component
-│   │   └── lib/
-│   │       ├── config.ts       # Typed frontend configuration module
-│   │       └── api/
-│   │           ├── client.ts   # Robust fetch wrapper with timeout and error classification
-│   │           └── health.ts   # Typed API health/version query functions
-│   └── tests/
-│       ├── setup.ts            # Vitest DOM matchers and mock lifecycle setup
-│       ├── components/
-│       │   └── BackendStatus.test.tsx # UI component states and retry tests
-│       └── lib/
-│           ├── client.test.ts  # HTTP client error handling and timeout tests
-│           ├── config.test.ts  # Client environment configuration tests
-│           └── health.test.ts  # API response runtime schema validation tests
+│   │   │   ├── page.tsx        # Home page with BackendStatus
+│   │   │   ├── assistant/      # Assistant conversational planning page
+│   │   │   └── trips/          # Trips list and details views
+│   │   ├── components/         # Reusable React components (Navbar, ToolActivityPanel)
+│   │   └── lib/                # API client wrappers and TypeScript contracts
+│   └── tests/                  # Vitest component and unit test suites
+├── docs/                       # Project documentation & architectural records
+│   ├── phase2-3/               # Phase 2-3 data contracts and branch plan
+│   ├── phase3/                 # Phase 3 architecture & agent workflow specs
+│   ├── qa/                     # Independent QA verification reports
+│   └── release/                # Release candidate reports
 └── scripts/
-    └── smoke_test.py           # Dependency-free live HTTP endpoint probing script
+    └── smoke_test.py           # Cross-platform service health probe script
 ```
 
 ---
 
-## 4. Technology Stack & Selected Versions
+## 4. Quick Start (Windows 11 & Bash)
 
-The repository pins current stable, compatible-release versions across all layers:
-
-- **Backend**:
-  - Python `3.11` (specifically `3.11.9`)
-  - FastAPI `~=0.146.0`
-  - Uvicorn `~=0.54.0` (standard extra)
-  - Pydantic Settings `~=2.16.0`
-  - SQLAlchemy `~=2.0.55`
-  - Psycopg `~=3.2.13` (binary extra)
-  - Alembic `~=1.14.1`
-  - Pytest `~=9.1.1`
-  - HTTPX `~=0.28.1`
-  - Ruff `~=0.17.1`
-- **Frontend**:
-  - Node.js `20` (`v20.18.0` LTS)
-  - npm `10.8.2`
-  - Next.js `16.4.2` (App Router)
-  - React `19.3.0` & React DOM `19.3.0`
-  - TypeScript `^5` (`5.9.3`)
-  - Vitest `~=3.2.7`
-  - Testing Library React `~=16.3.3`
-  - Tailwind CSS `^4`
-- **Database & Containerization**:
-  - PostgreSQL `16-alpine`
-  - Docker Compose v2
+### Prerequisites
+- **Python**: Version `3.11.x`
+- **Node.js**: Version `20.x` LTS (with `npm 10.x+`)
+- **Git**: Version `2.40+`
+- **Docker Desktop** *(Optional)*: Required only if running local PostgreSQL.
 
 ---
 
-## 5. Prerequisites
+### Step 1: Clone and Set Up Environment
 
-Before setting up the project locally, ensure you have the following installed:
-- **Operating System**: Windows 11 (PowerShell 5.1/7 primary) or macOS / Linux (Bash)
-- **Python**: `3.11` (verified with `3.11.9`; accessible via `py -3.11` or `python3.11`)
-- **Node.js**: `20` LTS (verified with `v20.18.0`; includes `npm`)
-- **Git**: Modern Git client
-- **Docker & Docker Compose**: (Optional for basic development; required only when running the local PostgreSQL container)
-
----
-
-## 6. Quick Start
-
-Follow these steps to run the complete AI Travel Concierge application locally.
-
-### Windows 11 (PowerShell)
-
+#### PowerShell (Windows 11):
 ```powershell
-# 1. Clone the repository
+# Clone the repository
 git clone https://github.com/dradhikac/ai-travel-concierge.git
 Set-Location ai-travel-concierge
 
-# 2. Set up Backend
+# Set up backend virtual environment
 Set-Location backend
 py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
 Copy-Item .env.example .env
-# Start the backend server (runs at http://localhost:8000)
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
-```
+Set-Location ..
 
-In a second PowerShell window:
-```powershell
-Set-Location ai-travel-concierge
-
-# 3. Set up Frontend
+# Set up frontend dependencies
 Set-Location frontend
 npm ci
 Copy-Item .env.example .env.local
-# Start the Next.js development server (runs at http://localhost:3000)
-npm run dev
+Set-Location ..
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your web browser. You will see the **Connected to Backend Service** status card displaying service health and API version metadata.
+#### Bash Equivalent:
+```bash
+git clone https://github.com/dradhikac/ai-travel-concierge.git
+cd ai-travel-concierge
 
-#### Optional: Start Local PostgreSQL & Run Database Migrations
-```powershell
-# From the repository root:
-Copy-Item .env.example .env
-docker compose up -d db
+# Backend setup
+cd backend
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements-dev.txt
+cp .env.example .env
+cd ..
 
-# Update backend/.env with DATABASE_URL (adjust port if 5432 is occupied):
-# DATABASE_URL=postgresql+psycopg://postgres:change-me-local-only@127.0.0.1:5433/ai_travel_concierge
-
-# Run Alembic migrations:
-Set-Location backend
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m alembic current
+# Frontend setup
+cd frontend
+npm ci
+cp .env.example .env.local
+cd ..
 ```
 
 ---
 
-### macOS / Linux (Bash)
+### Step 2: Start Development Services
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/dradhikac/ai-travel-concierge.git
-cd ai-travel-concierge
-
-# 2. Set up Backend
-cd backend
-python3.11 -m venv .venv
-./.venv/bin/python -m pip install --upgrade pip
-./.venv/bin/python -m pip install -r requirements-dev.txt
-cp .env.example .env
-# Start the backend server (runs at http://localhost:8000)
-./.venv/bin/python -m uvicorn app.main:app --reload --port 8000
+#### Backend Service (Runs on http://localhost:8000)
+```powershell
+# In PowerShell:
+Set-Location backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
-In a second terminal window:
 ```bash
-cd ai-travel-concierge
+# In Bash:
+cd backend && ./.venv/bin/python -m uvicorn app.main:app --reload --port 8000
+```
 
-# 3. Set up Frontend
-cd frontend
-npm ci
-cp .env.example .env.local
-# Start the Next.js development server (runs at http://localhost:3000)
-npm run dev
+#### Frontend Service (Runs on http://localhost:3000)
+```powershell
+# In a separate terminal:
+npm --prefix frontend run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-#### Optional: Start Local PostgreSQL & Run Database Migrations
-```bash
-# From repository root:
-cp .env.example .env
-docker compose up -d db
+---
 
-# In backend/.env:
-# DATABASE_URL=postgresql+psycopg://postgres:change-me-local-only@127.0.0.1:5432/ai_travel_concierge
+## 5. Walkthrough Demos
 
-cd backend
-./.venv/bin/python -m alembic upgrade head
-./.venv/bin/python -m alembic current
+### Demo 1: Phase 2 Deterministic Generator
+
+Demonstrates programmatic itinerary generation using the deterministic rule-based engine:
+
+```powershell
+# In PowerShell from repository root:
+.\backend\.venv\Scripts\python.exe -c @"
+from datetime import date
+from app.schemas.trip import TripRequest
+from app.services.itinerary import generate_itinerary
+
+request = TripRequest(
+    origin='London',
+    destination='Tokyo',
+    start_date=date(2026, 11, 10),
+    end_date=date(2026, 11, 13),
+    party_size=2,
+    pace='balanced',
+    interests=['culture', 'food']
+)
+itinerary = generate_itinerary(request=request, destination='Tokyo')
+print('=== Generated Itinerary ===')
+print('Summary:', itinerary.summary)
+print('Days:', len(itinerary.days))
+for day in itinerary.days:
+    print(f'Day {day.day_number} ({day.date}): {len(day.items)} activities')
+    for item in day.items:
+        print(f'  - [{item.time_of_day.upper()}] {item.title} (Provenance: {item.provenance.value})')
+"@
+```
+
+### Demo 2: Phase 3 Conversational Assistant Workflow
+
+Demonstrates the LangGraph agent state machine handling clarification, tool execution, and partial degradation:
+
+```powershell
+# In PowerShell from repository root:
+.\backend\.venv\Scripts\python.exe -c @"
+from app.agent.graph import run_workflow
+
+# 1. Ambiguous intake -> triggers clarification
+s1 = run_workflow('Plan a trip to Rome')
+print('[Turn 1] Status:', s1.status.value)
+print('[Turn 1] Question:', s1.clarification_question)
+print('[Turn 1] Missing:', s1.missing_fields)
+
+# 2. Complete intake -> executes geocoding & weather, drafts itinerary
+s2 = run_workflow('Plan a 3-day trip from London to Rome from 2026-11-10 to 2026-11-13 for 2 people')
+print('\n[Turn 2] Status:', s2.status.value)
+print('[Turn 2] Tools Run:', len(s2.tool_results))
+for a in s2.tool_activity:
+    print(f'  * Tool: {a.tool_label} | Status: {a.status} | Source: {a.source}')
+if s2.final_response:
+    print('[Turn 2] Summary:', s2.final_response.itinerary.summary)
+
+# 3. Non-booking invariant enforcement
+s3 = run_workflow('Book a flight from London to Paris and confirm payment')
+print('\n[Turn 3] Status:', s3.status.value)
+print('[Turn 3] Warning:', s3.warnings[0])
+"@
 ```
 
 ---
 
-## 7. Environment Variables
+## 6. Running Tests & Quality Verification
 
-Environment variables are isolated across service boundaries. Never commit actual `.env` files.
-
-| File Path | Variable Name | Required | Default Value | Description |
-| :--- | :--- | :---: | :--- | :--- |
-| `/.env` | `POSTGRES_USER` | Yes (for Docker) | `postgres` | Superuser username for local database container. |
-| `/.env` | `POSTGRES_PASSWORD` | Yes (for Docker) | `change-me-local-only` | Superuser password for local database container. |
-| `/.env` | `POSTGRES_DB` | Yes (for Docker) | `ai_travel_concierge` | Default database name. |
-| `/.env` | `POSTGRES_PORT` | No | `5432` (or `5433` if occupied)| Host port mapped to PostgreSQL container port 5432. |
-| `backend/.env` | `APP_ENV` | No | `development` | Runtime environment (`development`, `test`, `production`). |
-| `backend/.env` | `CORS_ORIGINS` | No | `["http://localhost:3000", ...]` | Allowed CORS origins (JSON array or comma-separated string). |
-| `backend/.env` | `DATABASE_URL` | No | `None` | SQLAlchemy connection string (`postgresql+psycopg://...`). Unset by default. |
-| `frontend/.env.local`| `NEXT_PUBLIC_API_BASE_URL` | No | `http://localhost:8000` | Backend base URL for browser and server fetches. |
-
-For exhaustive documentation and formatting rules, refer to [docs/environment.md](docs/environment.md).
-
----
-
-## 8. Running Tests and Verification Checks
-
-### Backend Checks (Ruff & Pytest)
+Execute the test suites locally to verify compliance:
 
 ```powershell
-# PowerShell
-Set-Location backend
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m ruff format --check .
-.\.venv\Scripts\python.exe -m pytest -q
-Set-Location ..
-```
+# 1. Backend Linting & Formatting
+.\backend\.venv\Scripts\python.exe -m ruff check backend
+.\backend\.venv\Scripts\python.exe -m ruff format --check backend
 
-```bash
-# Bash
-cd backend
-./.venv/bin/python -m ruff check .
-./.venv/bin/python -m ruff format --check .
-./.venv/bin/python -m pytest -q
-cd ..
-```
+# 2. Backend Unit & Adversarial Tests (257 passing tests)
+.\backend\.venv\Scripts\python.exe -m pytest -o pythonpath=backend -q backend\tests
 
-*Note*: Default `pytest` runs entirely offline and requires no live database (database sessions are mocked; integration tests marked `@pytest.mark.integration` automatically skip when `DATABASE_URL` is unset).
+# 3. Backend Dependency Health
+.\backend\.venv\Scripts\python.exe -m pip check
 
-### Frontend Checks (ESLint, TypeScript, Vitest, Build)
-
-```powershell
-# PowerShell
+# 4. Frontend Lint, Typecheck, and Vitest Tests (83 passing tests)
 npm --prefix frontend run lint
 npm --prefix frontend run typecheck
 npm --prefix frontend run test
+
+# 5. Frontend Production Compilation
 npm --prefix frontend run build
-```
 
-```bash
-# Bash
-npm --prefix frontend run lint
-npm --prefix frontend run typecheck
-npm --prefix frontend run test
-npm --prefix frontend run build
-```
-
-### End-to-End Smoke Test Script
-
-When services are running locally, execute the standalone Python standard-library probe script:
-```powershell
-# Probe local backend only (http://localhost:8000)
-.\backend\.venv\Scripts\python.exe scripts\smoke_test.py --backend-url http://localhost:8000
-
-# Probe both backend and frontend
+# 6. Service Smoke Test Script
 .\backend\.venv\Scripts\python.exe scripts\smoke_test.py --backend-url http://localhost:8000 --frontend-url http://localhost:3000
 ```
 
-Detailed test workflows and manual QA checklists are documented in [docs/testing.md](docs/testing.md).
+---
+
+## 7. External Provider Attribution
+
+AI Travel Concierge integrates with Open-Meteo for meteorological data:
+- **Provider**: [Open-Meteo](https://open-meteo.com/)
+- **License**: Weather and geocoding data by Open-Meteo.com under [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+- **Attribution Policy**: All meteorological summaries and geocoded locations display explicit attribution badges (`Open-Meteo`) and sanitized source links in the UI.
 
 ---
 
-## 9. Continuous Integration (CI)
+## 8. Honest Limitations & Operational Boundaries
 
-Automated continuous integration is defined in [.github/workflows/ci.yml](.github/workflows/ci.yml).
-- **Triggers**: Automated runs on `push` to `main` and `develop`, `pull_request` targeting `main` and `develop`, and manual trigger via `workflow_dispatch`.
-- **Permissions**: Minimum privileges (`permissions: contents: read`). No secrets or write tokens are configured.
-- **Concurrency**: Per-ref cancellation (`cancel-in-progress: true`).
-- **Jobs**:
-  1. `backend`: Sets up Python 3.11 with pip caching, installs `requirements-dev.txt`, runs `ruff check .`, `ruff format --check .`, and executes `pytest -q`.
-  2. `frontend`: Sets up Node.js 20 with npm caching, installs dependencies via `npm ci`, runs `npm run lint`, `npm run typecheck`, `npm run test`, and validates production compilation via `npm run build`.
-  3. `repo-hygiene`: Enforces that no `.env` files outside `.env.example` are committed and scans for accidental private keys or secret token patterns.
-
-*Note on Status Badges*: No CI status badge is included in this README because the workflow has been verified locally and a remote GitHub Actions execution has not yet run.
+1. **Discovery & Planning Only (NOT a Booking Engine)**: The system strictly organizes travel plans and does not book flights, reserve hotel rooms, purchase transit passes, or process payments.
+2. **Forecast Horizon (16 Days)**: Open-Meteo provides deterministic numerical forecasts up to 16 days in advance. Requests for dates further than 16 days out gracefully degrade to `PARTIAL` status with an explanatory notice.
+3. **Curated POI Suggestions**: Points of interest are selected from deterministic rule-based heuristics matched to traveler pace and interests rather than live ticket inventory.
+4. **Single-User Local Mode**: The application runs without user authentication or multi-tenant database partitioning.
+5. **Deterministic Rule Gateway**: LangGraph state routing utilizes the built-in `RuleBasedGateway`, eliminating unpredictable model hallucinations and external API key costs.
 
 ---
 
-## 10. Troubleshooting
-
-### 1. PowerShell Script Execution Policy Blocks venv Activation
-- **Symptom**: `.\.venv\Scripts\Activate.ps1 cannot be loaded because running scripts is disabled on this system.`
-- **Resolution**: Open PowerShell and run:
-  ```powershell
-  Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-  ```
-  Alternatively, invoke the virtual environment's Python binary directly without activation (e.g. `.\.venv\Scripts\python.exe -m uvicorn ...`).
-
-### 2. Port Conflicts (3000, 8000, or 5432 in Use)
-- **Port 8000 (Backend)**: If another application occupies port 8000, run Uvicorn on an alternate port:
-  ```powershell
-  python -m uvicorn app.main:app --reload --port 8001
-  ```
-  Remember to set `NEXT_PUBLIC_API_BASE_URL=http://localhost:8001` in `frontend/.env.local`.
-- **Port 3000 (Frontend)**: Next.js will automatically offer to run on port 3001 if 3000 is occupied, or specify `npm run dev -- -p 3001`.
-- **Port 5432 (PostgreSQL)**: If a host PostgreSQL instance occupies port 5432, update `POSTGRES_PORT` in your root `.env` to `5433`:
-  ```env
-  POSTGRES_PORT=5433
-  ```
-  Then run `docker compose up -d db` and set `DATABASE_URL=postgresql+psycopg://postgres:change-me-local-only@127.0.0.1:5433/ai_travel_concierge` in `backend/.env`.
-
-### 3. Cross-Origin Resource Sharing (CORS) Errors
-- **Symptom**: Browser console indicates `CORS policy: No 'Access-Control-Allow-Origin' header is present`.
-- **Resolution**: Ensure `CORS_ORIGINS` in `backend/.env` contains your exact frontend origin:
-  ```env
-  CORS_ORIGINS=["http://localhost:3000"]
-  ```
-
-### 4. Wrong Python or Node.js Versions
-- **Symptom**: Incompatible syntax errors or module loading failures.
-- **Resolution**: Verify versions with `python --version` (requires Python `3.11.x`) and `node --version` (requires Node.js `20.x`). On Windows with multiple Python versions installed, invoke the `py` launcher: `py -3.11 -m venv .venv`.
-
-### 5. `npm ci` Fails Due to Lockfile Desynchronization
-- **Symptom**: `npm error code EUSAGE` or `npm ci can only install with an existing package-lock.json`.
-- **Resolution**: Do not modify `package-lock.json` manually. Ensure you run `npm ci` from within the `frontend/` directory (or use `npm --prefix frontend ci`).
-
-### 6. Docker Desktop Not Running
-- **Symptom**: `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`.
-- **Resolution**: Launch Docker Desktop and wait until the engine status shows "Engine running" before executing `docker compose up -d db`.
-
-### 7. Database Data Loss from `docker compose down -v`
-- **Caution**: **NEVER run `docker compose down -v`**.
-- The `-v` flag permanently removes named Docker volumes (`postgres_data`), deleting all local database tables and migration records. Always run `docker compose down` (without `-v`) to preserve data between development sessions.
-
----
-
-## 11. Roadmap
+## 9. Roadmap
 
 - [x] **Phase 1: Project Foundation**
   - Scaffolding, engineering conventions, modular monolith seams.
-  - FastAPI health, version, and database readiness endpoints with standard error handling.
-  - Next.js application shell with real-time health indicator and offline recovery.
+  - FastAPI health, version, and database readiness endpoints.
+  - Next.js application shell with real-time health indicator.
   - PostgreSQL containerization and Alembic baseline migrations.
-  - Comprehensive unit, integration, and CI validation pipelines.
-- [ ] **Phase 2: Agent Orchestration & Core Workflows** *(Planned)*
-  - LangGraph workflow definition and state management.
-  - Destination research and point-of-interest discovery tool definitions.
-  - Structured output validation and citation tracking.
-- [ ] **Phase 3: Live Travel Integrations & Curation** *(Planned)*
-  - Live external API integrations (places, activities, transit overviews).
-  - Rate limiting, fallback handling, and deterministic caching.
-- [ ] **Phase 4: Trip Organizer & User Persistence** *(Planned)*
-  - User-driven itinerary organization and notes.
-  - Database persistence for trips and curated spots.
+- [x] **Phase 2: Deterministic Engine & Live Provider**
+  - Validated trip intake schema (`TripRequest`).
+  - Open-Meteo geocoding and weather provider adapter with offline fixtures.
+  - Deterministic day-by-day itinerary generator with strict provenance tracking.
+  - Results and saved trips user interfaces (`/trips`, `/trips/[id]`).
+- [x] **Phase 3: Controlled LangGraph Workflow & Assistant UI**
+  - Typed `TripState` state machine with pure nodes and step guards (`MAX_STEPS = 25`).
+  - Narrow typed tools (`geocode_destination`, `get_weather`) with sequential caps (`MAX_TOOL_CALLS = 5`).
+  - Safe clarification loop and default preference policies.
+  - Interactive Assistant UI (`/assistant`) with real-time `ToolActivityPanel`.
+  - Comprehensive adversarial robustness test suite.
+- [ ] **Phase 4: Multi-Turn Memory & User Accounts** *(Planned)*
+  - User session authentication and persistent user trip profiles.
+  - Optional multi-provider travel recommendations (transit, walking routes).
+  - Multi-destination trip graph connections.
 
 ---
 
-## 12. Contributing & Licensing
+## 10. Contributing & Licensing
 
 - **Contributing**: Please review [CONTRIBUTING.md](CONTRIBUTING.md) for branch management rules, conventional commit formatting, and quality checklists.
-- **Licensing**: No open source or commercial license has been selected for this project yet. All rights are reserved. Do not add license files or license headers to repository files.
+- **Licensing**: No open source or commercial license has been selected for this project yet. All rights are reserved. Do not add license headers to repository files.
