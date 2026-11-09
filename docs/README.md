@@ -17,5 +17,7 @@ This directory contains architectural specifications, decision records, and oper
 - [Phase 1 Release Notes](releases/phase1.md): Scope deliverable inventory, inclusions, and known limitations for v0.1.0.
 - [Phase 2 & Phase 3 Branch Plan](phase2-3/branch-plan.md): Planned branch roadmap, retention policies, and manual merge sequencing.
 - [Phase 2 Data Contracts](phase2-3/data-contracts.md): Pydantic intake schemas, normalized provider models, error catalog, and API contracts.
+- [Phase 4 & Phase 5 Branch Plan](phase4-5/branch-plan.md): Phase 4–5 branch roadmap, retention policies, and manual merge sequencing.
+- [Phase 4 & Phase 5 Reliability Contracts](phase4-5/reliability-contracts.md): Provider error hierarchy, retry policies, Itinerary v2 schema, and validation catalog.
 - [Architecture Decision Records (ADRs)](decisions/0001-phase1-stack.md):
   - [ADR 0001: Phase 1 Core Stack and Modular Monolith](decisions/0001-phase1-stack.md)
