@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.agent.errors import ToolErrorCode
+from app.providers.errors import ErrorCode, ProviderError
 from app.schemas.provider import SourceInfo
 
 
@@ -198,4 +199,51 @@ class ToolCall(BaseModel):
     )
     call_id: str | None = Field(
         default=None, description="Optional unique identifier for tracing"
+    )
+
+
+def provider_error_to_tool_result(
+    err: ProviderError,
+    tool_name: str,
+    latency_ms: float = 0.0,
+    attempts: int = 1,
+) -> ToolResult:
+    """Map a unified ProviderError to a normalized ToolResult envelope in ONE place."""
+    status: ToolStatus
+    error_code: ToolErrorCode
+
+    # Check for network unavailable specifically if legacy subclass
+    if type(err).__name__ == "NetworkUnavailableError":
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.PROVIDER_UNAVAILABLE
+    elif err.code == ErrorCode.TIMEOUT:
+        status = ToolStatus.TIMEOUT
+        error_code = ToolErrorCode.TIMEOUT
+    elif err.code == ErrorCode.RATE_LIMITED:
+        status = ToolStatus.RATE_LIMITED
+        error_code = ToolErrorCode.RATE_LIMITED
+    elif err.code == ErrorCode.AUTHENTICATION_FAILED:
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.PROVIDER_UNAVAILABLE
+    elif err.code == ErrorCode.INVALID_RESPONSE:
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.MALFORMED_RESPONSE
+    elif err.code == ErrorCode.INVALID_REQUEST:
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.INVALID_ARGUMENTS
+    else:  # ErrorCode.UNKNOWN_FAILURE and any others
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.PROVIDER_UNAVAILABLE
+
+    return ToolResult(
+        tool_name=tool_name,
+        status=status,
+        data=None,
+        error_code=error_code,
+        safe_message=err.safe_message,
+        source=None,
+        fetched_at=None,
+        data_origin="none",
+        latency_ms=latency_ms,
+        attempts=attempts,
     )

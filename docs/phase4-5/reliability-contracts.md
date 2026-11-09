@@ -23,7 +23,11 @@ This document defines the reliability engineering standards, shared provider err
 
 ## 2. Shared Provider Error Model
 
-Phase 4 unifies all external provider errors into a standardized, typed exception model (`ProviderError`) located in `backend/app/providers/errors.py` [PLANNED].
+- **Status**: **IMPLEMENTED (Phase 4 Task 4)**
+- **Implementation**: `backend/app/providers/errors.py`
+- **Tool Mapping**: `backend/app/agent/tools/contracts.py` (`provider_error_to_tool_result`)
+
+Phase 4 unifies all external provider errors into a standardized, typed exception model (`ProviderError`) located in `backend/app/providers/errors.py`.
 
 ### Unified ProviderError Class Contract
 
