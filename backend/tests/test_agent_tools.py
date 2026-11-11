@@ -568,8 +568,12 @@ def test_weather_adapter_exceptions_map_safely(
 
 
 def test_tool_registry_contains_exactly_registered_tools() -> None:
-    """TOOL_REGISTRY contains exactly 'geocode_destination' and 'get_weather'."""
-    assert set(TOOL_REGISTRY.keys()) == {"geocode_destination", "get_weather"}
+    """TOOL_REGISTRY contains exactly geocode, weather, and route tools."""
+    assert set(TOOL_REGISTRY.keys()) == {
+        "geocode_destination",
+        "get_weather",
+        "get_route_context",
+    }
 
     for name, tool in TOOL_REGISTRY.items():
         assert isinstance(tool, StructuredTool)
@@ -579,7 +583,6 @@ def test_tool_registry_contains_exactly_registered_tools() -> None:
         assert len(tool.description) > 10
 
     # Explicitly confirm absence of future/unimplemented tools
-    assert "get_route_context" not in TOOL_REGISTRY
     assert "search_places" not in TOOL_REGISTRY
 
 
@@ -592,6 +595,10 @@ def test_tool_registry_descriptions_contain_expected_boundaries() -> None:
     weather_tool = TOOL_REGISTRY["get_weather"]
     assert "forecast" in weather_tool.description.lower()
     assert "16 days" in weather_tool.description.lower()
+
+    route_tool = TOOL_REGISTRY["get_route_context"]
+    assert "distance" in route_tool.description.lower()
+    assert "not perform flight or transit" in route_tool.description.lower()
 
 
 def test_get_tool_success_and_aliases() -> None:
@@ -606,16 +613,22 @@ def test_get_tool_success_and_aliases() -> None:
     assert get_tool("weather") is canonical_weather
     assert get_tool("weather_tool") is canonical_weather
 
+    canonical_route = get_tool("get_route_context")
+    assert canonical_route.name == "get_route_context"
+    assert get_tool("route") is canonical_route
+    assert get_tool("routing") is canonical_route
+
 
 def test_get_tool_unknown_raises_clear_key_error() -> None:
     """Requesting an unregistered tool raises KeyError with available tools."""
     with pytest.raises(KeyError) as exc_info:
-        get_tool("get_route_context")
+        get_tool("search_places")
 
     msg = str(exc_info.value)
-    assert "Unknown tool 'get_route_context'" in msg
+    assert "Unknown tool 'search_places'" in msg
     assert "geocode_destination" in msg
     assert "get_weather" in msg
+    assert "get_route_context" in msg
 
 
 def test_langchain_interface_parity_with_direct_call(
