@@ -109,7 +109,7 @@ Phase 2 and Phase 3 error classes map directly to the unified `ProviderError` mo
 
 ## 3. Retry Policy Defaults & Guardrails
 
-Phase 4 defines strict, deterministic retry parameters in `backend/app/core/config.py` and implements a centralized `retry_with_backoff` utility in `backend/app/core/retry.py` [PLANNED].
+Phase 4 defines strict, deterministic retry parameters in `backend/app/core/config.py` and implements a centralized `call_with_retry` utility in `backend/app/core/retry.py` [IMPLEMENTED].
 
 ### Configured Retry Parameters
 

@@ -132,6 +132,7 @@ class ProviderError(Exception):
         self.http_status = http_status
         self.retry_after_seconds = retry_after_seconds
         self.details = details or {}
+        self.attempts: int = 1
 
         # Derive retryable if not explicitly provided
         if retryable is not None:
@@ -144,6 +145,13 @@ class ProviderError(Exception):
             self.safe_message = sanitize_safe_message(safe_message)
         else:
             self.safe_message = self._default_safe_message()
+
+    @property
+    def error_code(self) -> str:
+        """Return standardized string error code."""
+        if hasattr(self.code, "value"):
+            return str(self.code.value)
+        return str(self.code)
 
     def _derive_retryable(self) -> bool:
         """Derive retryable flag from error code, status, and retry-after bounds."""
