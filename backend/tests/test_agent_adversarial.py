@@ -11,7 +11,7 @@ Step 3 verification suite:
 - Absolute non-booking invariant: never claims reservations or ticketing occurred
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
@@ -21,10 +21,20 @@ from app.agent.graph import run_workflow
 from app.agent.state import Intent, RunStatus, TripState, create_fresh_trip_state
 from app.agent.tools.contracts import ToolResult, ToolStatus
 from app.schemas.provider import SourceInfo
+from app.schemas.trip import TripRequest
 
 # ==============================================================================
 # Fixtures
 # ==============================================================================
+
+
+@pytest.fixture(autouse=True)
+def reference_today() -> date:
+    """Set deterministic reference date for trip validation across tests."""
+    ref_date = date(2026, 11, 1)
+    TripRequest.set_test_today(ref_date)
+    yield ref_date
+    TripRequest.set_test_today(None)
 
 
 @pytest.fixture
