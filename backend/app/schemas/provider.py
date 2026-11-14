@@ -104,3 +104,39 @@ class WeatherSummary(BaseModel):
         if v.tzinfo is None:
             return v.replace(tzinfo=UTC)
         return v.astimezone(UTC)
+
+
+class RouteSummary(BaseModel):
+    """Normalized routing context and transit feasibility summary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    distance_km: float = Field(
+        ..., ge=0.0, description="Transit distance in kilometers"
+    )
+    duration_minutes: float = Field(
+        ..., ge=0.0, description="Estimated transit duration in minutes"
+    )
+    mode: str = Field(
+        ..., description="Transit modality (walking, cycling, or driving)"
+    )
+    origin: tuple[float, float] = Field(
+        ..., description="Origin coordinates (latitude, longitude)"
+    )
+    destination: tuple[float, float] = Field(
+        ..., description="Destination coordinates (latitude, longitude)"
+    )
+    source: SourceInfo = Field(..., description="Provider attribution metadata")
+    attribution: str = Field(..., description="Human-readable attribution notice")
+    fetched_at: datetime = Field(..., description="UTC timestamp of API request")
+    data_origin: Literal["live", "mock"] = Field(
+        ..., description="Indicates live API vs deterministic fixture data"
+    )
+
+    @field_validator("fetched_at", mode="after")
+    @classmethod
+    def ensure_utc_timezone(cls, v: datetime) -> datetime:
+        """Ensure fetched_at timestamp is timezone-aware UTC."""
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)

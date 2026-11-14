@@ -186,6 +186,51 @@ class WeatherArgs(BaseModel):
         return self
 
 
+class RouteArgs(BaseModel):
+    """Validated arguments contract for route and transit feasibility context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    origin_lat: float = Field(
+        ...,
+        ge=-90.0,
+        le=90.0,
+        description="Origin latitude coordinate (-90 to 90)",
+    )
+    origin_lon: float = Field(
+        ...,
+        ge=-180.0,
+        le=180.0,
+        description="Origin longitude coordinate (-180 to 180)",
+    )
+    dest_lat: float = Field(
+        ...,
+        ge=-90.0,
+        le=90.0,
+        description="Destination latitude coordinate (-90 to 90)",
+    )
+    dest_lon: float = Field(
+        ...,
+        ge=-180.0,
+        le=180.0,
+        description="Destination longitude coordinate (-180 to 180)",
+    )
+    mode: Literal["walking", "cycling", "driving"] = Field(
+        default="walking",
+        description="Transit modality allow-list: walking, cycling, or driving",
+    )
+
+    @model_validator(mode="after")
+    def validate_endpoints_distinct(self) -> "RouteArgs":
+        """Verify origin and destination coordinates are distinct."""
+        if (
+            abs(self.origin_lat - self.dest_lat) < 1e-6
+            and abs(self.origin_lon - self.dest_lon) < 1e-6
+        ):
+            raise ValueError("Origin and destination coordinates cannot be identical")
+        return self
+
+
 class ToolCall(BaseModel):
     """Typed tool call planned or executed by the agent workflow."""
 

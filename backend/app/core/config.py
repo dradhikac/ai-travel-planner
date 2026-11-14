@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Final, Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Phase 3 Agent Workflow Bounds Constants
@@ -37,12 +37,66 @@ class Settings(BaseSettings):
     OPEN_METEO_READ_TIMEOUT_SECONDS: float = 5.0
     OPEN_METEO_MAX_RETRIES: int = 1
 
+    # Phase 4 Retry and Backoff Settings
+    PROVIDER_MAX_RETRIES: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum retry attempts on retryable provider failures.",
+    )
+    PROVIDER_BACKOFF_BASE_SECONDS: float = Field(
+        default=0.5,
+        ge=0.1,
+        le=10.0,
+        description="Initial exponential backoff delay in seconds.",
+    )
+    PROVIDER_BACKOFF_MAX_SECONDS: float = Field(
+        default=4.0,
+        ge=0.5,
+        le=30.0,
+        description="Ceiling for individual backoff wait delay in seconds.",
+    )
+    PROVIDER_RETRY_BUDGET_SECONDS: float = Field(
+        default=8.0,
+        ge=1.0,
+        le=60.0,
+        description=(
+            "Hard cumulative time budget across all retry attempts in seconds."
+        ),
+    )
+
     # Phase 3 Agent Workflow Bounds and Guardrails
     AGENT_MAX_TOOL_CALLS: int = MAX_TOOL_CALLS
     AGENT_MAX_REPAIR_ATTEMPTS: int = MAX_REPAIR_ATTEMPTS
     AGENT_RECURSION_LIMIT: int = AGENT_RECURSION_LIMIT
 
-    @field_validator("DATABASE_URL", mode="before")
+    # Phase 4 OpenRouteService Routing Provider Settings
+    OPENROUTESERVICE_API_KEY: str | None = Field(
+        default=None,
+        description="OpenRouteService API key for directions and transit context.",
+    )
+    OPENROUTESERVICE_BASE_URL: str = Field(
+        default="https://api.openrouteservice.org/v2/directions",
+        description="OpenRouteService directions API endpoint base URL.",
+    )
+    OPENROUTESERVICE_TIMEOUT_SECONDS: float = Field(
+        default=4.0,
+        ge=0.5,
+        le=30.0,
+        description="Request timeout in seconds for OpenRouteService requests.",
+    )
+    OPENROUTESERVICE_MAX_RETRIES: int = Field(
+        default=1,
+        ge=0,
+        le=5,
+        description="Max retries for transient OpenRouteService failures.",
+    )
+    ROUTING_PROVIDER_MODE: Literal["live", "mock"] = Field(
+        default="mock",
+        description="Routing provider operating mode: live API or deterministic mock.",
+    )
+
+    @field_validator("DATABASE_URL", "OPENROUTESERVICE_API_KEY", mode="before")
     @classmethod
     def empty_str_to_none(cls, v: str | None) -> str | None:
         if isinstance(v, str) and not v.strip():

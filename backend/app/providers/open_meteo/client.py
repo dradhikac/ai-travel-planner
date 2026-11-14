@@ -2,6 +2,7 @@
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 import httpx
 
 from app.core.config import Settings, get_settings
+from app.core.retry import RetryPolicy, call_with_retry
 from app.providers.open_meteo.errors import (
     HttpError,
     MalformedResponseError,
@@ -40,9 +42,20 @@ class OpenMeteoClient:
         self,
         settings: Settings | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        retry_sleep: Callable[[float], Awaitable[None]] | None = None,
+        retry_clock: Callable[[], float] | None = None,
+        retry_random: Callable[[float, float], float] | None = None,
+        retry_on_event: Callable[[int, str, float], None] | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.transport = transport
+        self.retry_policy = retry_policy
+        self._retry_sleep = retry_sleep
+        self._retry_clock = retry_clock
+        self._retry_random = retry_random
+        self._retry_on_event = retry_on_event
 
     def _get_http_client(self) -> httpx.AsyncClient:
         """Create configured httpx.AsyncClient instance."""
@@ -66,118 +79,92 @@ class OpenMeteoClient:
         params: dict[str, Any],
     ) -> tuple[dict[str, Any], datetime]:
         """Execute HTTP GET request with bounded retries on transient errors."""
-        max_retries = self.settings.OPEN_METEO_MAX_RETRIES
-        attempts = 1 + max(0, max_retries)
+        policy = self.retry_policy or RetryPolicy(
+            max_retries=self.settings.OPEN_METEO_MAX_RETRIES,
+            base_delay_seconds=self.settings.PROVIDER_BACKOFF_BASE_SECONDS,
+            backoff_factor=2.0,
+            max_delay_seconds=self.settings.PROVIDER_BACKOFF_MAX_SECONDS,
+            total_budget_seconds=self.settings.PROVIDER_RETRY_BUDGET_SECONDS,
+            jitter=True,
+        )
 
         async with self._get_http_client() as client:
-            last_exception: Exception | None = None
 
-            for attempt in range(1, attempts + 1):
+            async def _single_request() -> tuple[dict[str, Any], datetime]:
                 request_time = datetime.now(UTC)
                 try:
                     response = await client.get(url, params=params)
-
-                    # 1. Handle Rate Limiting (429) -> NEVER retry, surface Retry-After
-                    if response.status_code == 429:
-                        retry_after_header = response.headers.get("Retry-After")
-                        retry_after_val: float | None = None
-                        if retry_after_header:
-                            try:
-                                retry_after_val = float(retry_after_header)
-                            except ValueError:
-                                retry_after_val = None
-                        raise RateLimitExceededError(
-                            retry_after=retry_after_val,
-                            message=(
-                                "Open-Meteo rate limit exceeded. Please retry later."
-                            ),
-                        )
-
-                    # 2. Handle HTTP 5xx Server Errors -> Retryable if attempts remain
-                    if response.status_code >= 500:
-                        if attempt < attempts:
-                            logger.warning(
-                                "Open-Meteo 5xx error (%d) attempt %d/%d; retrying...",
-                                response.status_code,
-                                attempt,
-                                attempts,
-                            )
-                            continue
-                        raise HttpError(
-                            status_code=response.status_code,
-                            message=(
-                                f"Open-Meteo server error: HTTP {response.status_code}"
-                            ),
-                        )
-
-                    # 3. Handle HTTP 4xx Client Errors -> NEVER retry
-                    if response.status_code >= 400:
-                        reason: str | None = None
-                        try:
-                            error_payload = response.json()
-                            if isinstance(error_payload, dict):
-                                reason = error_payload.get("reason")
-                        except Exception:
-                            reason = None
-
-                        raise HttpError(
-                            status_code=response.status_code,
-                            message=(
-                                f"Open-Meteo request error: HTTP {response.status_code}"
-                            ),
-                            reason=reason,
-                        )
-
-                    # 4. Successful 2xx response -> Parse JSON
-                    try:
-                        data = response.json()
-                    except Exception as err:
-                        raise MalformedResponseError(
-                            "Open-Meteo response could not be parsed as JSON"
-                        ) from err
-
-                    if not isinstance(data, dict):
-                        raise MalformedResponseError(
-                            "Open-Meteo JSON response must be an object"
-                        )
-
-                    return data, request_time
-
-                except (RateLimitExceededError, HttpError, MalformedResponseError):
-                    # Do not swallow or retry non-retryable errors
-                    raise
-
                 except httpx.TimeoutException as err:
-                    last_exception = err
-                    if attempt < attempts:
-                        logger.warning(
-                            "Open-Meteo timeout on attempt %d/%d; retrying...",
-                            attempt,
-                            attempts,
-                        )
-                        continue
                     raise TimeoutError(
                         "Open-Meteo request timed out while communicating with provider"
                     ) from err
-
                 except httpx.NetworkError as err:
-                    last_exception = err
-                    if attempt < attempts:
-                        logger.warning(
-                            "Open-Meteo network error on attempt %d/%d; retrying...",
-                            attempt,
-                            attempts,
-                        )
-                        continue
                     raise NetworkUnavailableError(
                         "Open-Meteo network service is unavailable"
                     ) from err
 
-            if isinstance(last_exception, httpx.TimeoutException):
-                raise TimeoutError("Open-Meteo request timed out") from last_exception
-            raise NetworkUnavailableError(
-                "Open-Meteo network service is unavailable"
-            ) from last_exception
+                # 1. Handle Rate Limiting (429) -> NEVER retry unless small Retry-After
+                if response.status_code == 429:
+                    retry_after_header = response.headers.get("Retry-After")
+                    retry_after_val: float | None = None
+                    if retry_after_header:
+                        try:
+                            retry_after_val = float(retry_after_header)
+                        except ValueError:
+                            retry_after_val = None
+                    raise RateLimitExceededError(
+                        retry_after=retry_after_val,
+                        message="Open-Meteo rate limit exceeded. Please retry later.",
+                    )
+
+                # 2. Handle HTTP 5xx Server Errors -> Retryable via ProviderError
+                if response.status_code >= 500:
+                    raise HttpError(
+                        status_code=response.status_code,
+                        message=f"Open-Meteo server error: HTTP {response.status_code}",
+                    )
+
+                # 3. Handle HTTP 4xx Client Errors -> NEVER retry
+                if response.status_code >= 400:
+                    reason: str | None = None
+                    try:
+                        error_payload = response.json()
+                        if isinstance(error_payload, dict):
+                            reason = error_payload.get("reason")
+                    except Exception:
+                        reason = None
+
+                    raise HttpError(
+                        status_code=response.status_code,
+                        message=(
+                            f"Open-Meteo request error: HTTP {response.status_code}"
+                        ),
+                        reason=reason,
+                    )
+
+                # 4. Successful 2xx response -> Parse JSON
+                try:
+                    data = response.json()
+                except Exception as err:
+                    raise MalformedResponseError(
+                        "Open-Meteo response could not be parsed as JSON"
+                    ) from err
+
+                if not isinstance(data, dict):
+                    raise MalformedResponseError(
+                        "Open-Meteo JSON response must be an object"
+                    )
+
+                return data, request_time
+
+            return await call_with_retry(
+                _single_request,
+                policy=policy,
+                sleep=self._retry_sleep,
+                clock=self._retry_clock,
+                random_source=self._retry_random,
+                on_event=self._retry_on_event,
+            )
 
     def _load_mock_fixture(self, filename: str) -> dict[str, Any]:
         """Load deterministic fixture from local disk in mock mode."""
