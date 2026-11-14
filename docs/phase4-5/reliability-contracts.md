@@ -146,7 +146,7 @@ else:
 
 ## 4. Itinerary Schema v2
 
-Phase 4 introduces `ItineraryV2` in `backend/app/schemas/itinerary_v2.py` [PLANNED]. Schema v2 provides fine-grained activity identification, duration estimates, explicit provenance, uncertainty tracking, and structured cost statuses.
+Phase 4 introduces `ItineraryV2` in `backend/app/schemas/itinerary_v2.py` [IMPLEMENTED in feature/phase4-itinerary-schema-v2]. Schema v2 provides fine-grained activity identification, duration estimates, explicit provenance, uncertainty tracking, and structured cost statuses.
 
 ### Schema Hierarchy
 
@@ -376,6 +376,32 @@ def upgrade_itinerary_v1_to_v2(v1: dict[str, Any]) -> dict[str, Any]:
         days=v2_days,
     ).model_dump(mode="json")
 ```
+
+### Schema v1 to v2 Field Mapping Table
+
+| v1 Concept / Field (`Itinerary`, `ItineraryDay`, `ItineraryItem`) | v2 Target Field (`ItineraryV2`, `ItineraryDayV2`, `ItineraryActivityV2`) | Type Transformation | Default / Upgrade Rule |
+| :--- | :--- | :--- | :--- |
+| *(implicit)* | `ItineraryV2.schema_version` | `Literal[2]` | Explicit integer `2`. |
+| `Itinerary.summary` | `ItineraryV2.summary` | `str` | Direct copy. |
+| `Itinerary.warnings` | `ItineraryV2.warnings` | `list[str]` | Direct copy. |
+| *(implicit / empty)* | `ItineraryV2.sources` | `list[SourceInfo]` | Carried from weather/geocode sources if available, otherwise `[]`. |
+| `Itinerary.days` | `ItineraryV2.days` | `list[ItineraryDayV2]` | Converted via day-level mapping. |
+| `ItineraryDay.day_number` | `ItineraryDayV2.day_number` | `int` | Direct copy (`>= 1`). |
+| `ItineraryDay.date` | `ItineraryDayV2.date` | `date` | Direct copy or parsed from ISO string. |
+| *(implicit / empty)* | `ItineraryDayV2.uncertainty_notes` | `list[str]` | Empty list `[]` by default. |
+| `ItineraryDay.items` | `ItineraryDayV2.activities` | `list[ItineraryActivityV2]` | Converted via activity-level mapping. Backward compatible `@property def items` retained on `ItineraryDayV2`. |
+| *(implicit / missing)* | `ItineraryActivityV2.id` | `str` | Deterministic stable ID: `day_{day_number}_act_{index}` (e.g. `day_1_act_1`). |
+| `ItineraryItem.title` | `ItineraryActivityV2.title` | `str` | Direct copy. |
+| `ItineraryItem.description` | `ItineraryActivityV2.description` | `str \| None` | Direct copy. Preserved to prevent information loss in UI. |
+| `ItineraryItem.time_of_day` | `ItineraryActivityV2.time_of_day` | `str \| None` | String value (e.g. `"morning"`), mapped to `duration_estimate`. |
+| *(implicit / empty)* | `ItineraryActivityV2.interest_tags` | `list[str]` | Empty list `[]` during upgrade; populated with `[template.category]` by generator. |
+| *(implicit / null)* | `ItineraryActivityV2.location` | `ActivityLocation \| None` | `None` during upgrade; populated from geocoding coordinates when generated. |
+| *(implicit from time_of_day)* | `ItineraryActivityV2.duration_estimate` | `DurationEstimate \| None` | Default heuristic `min_minutes=60, max_minutes=180, basis=DurationBasis.HEURISTIC`. |
+| `ItineraryItem.source_ref` | `ItineraryActivityV2.source_refs` | `list[str]` | `[item.source_ref]` if non-empty, otherwise `[]`. Backward compatible `@property def source_ref` retained. |
+| `ItineraryItem.provenance` | `ItineraryActivityV2.provenance` | `Provenance` | Direct copy, defaulting to `Provenance.GENERATED_SUGGESTION`. |
+| `ItineraryItem.cost_estimate` | `ItineraryActivityV2.cost_status` | `CostStatus` | Derived: `RETRIEVED` if `cost_estimate` & `provenance == RETRIEVED` & `source_refs`; `ESTIMATE` if `cost_estimate` is present; otherwise `UNKNOWN`. |
+| `ItineraryItem.cost_estimate` | `ItineraryActivityV2.cost_note` | `str \| None` | Direct copy of estimate string. Backward compatible `@property def cost_estimate` retained. |
+| `ItineraryItem.note` | `ItineraryActivityV2.uncertainty_notes` | `list[str]` | `[item.note]` if non-empty, otherwise `[]`. Backward compatible `@property def note` returns `" ".join(uncertainty_notes)`. |
 
 ---
 
