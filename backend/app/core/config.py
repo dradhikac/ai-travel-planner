@@ -70,7 +70,33 @@ class Settings(BaseSettings):
     AGENT_MAX_REPAIR_ATTEMPTS: int = MAX_REPAIR_ATTEMPTS
     AGENT_RECURSION_LIMIT: int = AGENT_RECURSION_LIMIT
 
-    @field_validator("DATABASE_URL", mode="before")
+    # Phase 4 OpenRouteService Routing Provider Settings
+    OPENROUTESERVICE_API_KEY: str | None = Field(
+        default=None,
+        description="OpenRouteService API key for directions and transit context.",
+    )
+    OPENROUTESERVICE_BASE_URL: str = Field(
+        default="https://api.openrouteservice.org/v2/directions",
+        description="OpenRouteService directions API endpoint base URL.",
+    )
+    OPENROUTESERVICE_TIMEOUT_SECONDS: float = Field(
+        default=4.0,
+        ge=0.5,
+        le=30.0,
+        description="Request timeout in seconds for OpenRouteService requests.",
+    )
+    OPENROUTESERVICE_MAX_RETRIES: int = Field(
+        default=1,
+        ge=0,
+        le=5,
+        description="Max retries for transient OpenRouteService failures.",
+    )
+    ROUTING_PROVIDER_MODE: Literal["live", "mock"] = Field(
+        default="mock",
+        description="Routing provider operating mode: live API or deterministic mock.",
+    )
+
+    @field_validator("DATABASE_URL", "OPENROUTESERVICE_API_KEY", mode="before")
     @classmethod
     def empty_str_to_none(cls, v: str | None) -> str | None:
         if isinstance(v, str) and not v.strip():

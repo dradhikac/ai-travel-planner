@@ -9,6 +9,7 @@ from app.schemas.health import HealthResponse
 from app.schemas.provider import (
     GeocodeResult,
     Provenance,
+    RouteSummary,
     SourceInfo,
     WeatherDay,
     WeatherSummary,
@@ -37,6 +38,7 @@ __all__ = [
     "ItineraryItem",
     "PacePreference",
     "Provenance",
+    "RouteSummary",
     "SourceInfo",
     "TimeOfDay",
     "ToolActivity",

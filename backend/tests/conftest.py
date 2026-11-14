@@ -1,11 +1,23 @@
 """Pytest fixtures for backend test suite."""
 
+from datetime import date
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings, get_settings
 from app.main import create_app
+from app.schemas.trip import TripRequest
+
+
+@pytest.fixture(autouse=True)
+def reference_today() -> date:
+    """Set deterministic reference date for trip validation across all tests."""
+    ref_date = date(2026, 11, 1)
+    TripRequest.set_test_today(ref_date)
+    yield ref_date
+    TripRequest.set_test_today(None)
 
 
 @pytest.fixture
