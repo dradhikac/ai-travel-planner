@@ -51,56 +51,95 @@ export function ItineraryView({
                 </time>
               </div>
 
-              {day.items && day.items.length > 0 ? (
-                <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {day.items.map((item, index) => (
-                    <li
-                      key={`${day.day_number}-${index}`}
-                      className="p-5 space-y-2.5 hover:bg-slate-50/40 dark:hover:bg-slate-850/40 transition-colors"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                            {TIME_OF_DAY_LABELS[item.time_of_day] || item.time_of_day}
-                          </span>
-                          <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-base">
-                            {item.title}
-                          </h4>
-                        </div>
-                        <ProvenanceBadge provenance={item.provenance} />
-                      </div>
+              {(() => {
+                const activities = (day.activities && day.activities.length > 0)
+                  ? day.activities
+                  : (day.items ?? []);
 
-                      <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                        {item.description}
-                      </p>
+                if (activities.length === 0) {
+                  return (
+                    <p className="p-5 text-sm text-slate-500 dark:text-slate-400">
+                      No activities scheduled for this day.
+                    </p>
+                  );
+                }
 
-                      {(item.note || item.cost_estimate || item.source_ref) && (
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-slate-500 dark:text-slate-400">
-                          {item.note && (
-                            <span className="italic">
-                              Tip: {item.note}
-                            </span>
+                return (
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {activities.map((item, index) => {
+                      const timeLabel = item.time_of_day
+                        ? (TIME_OF_DAY_LABELS[item.time_of_day] || item.time_of_day)
+                        : null;
+                      const noteText = (
+                        "uncertainty_notes" in item &&
+                        Array.isArray(item.uncertainty_notes) &&
+                        item.uncertainty_notes.length > 0
+                      )
+                        ? item.uncertainty_notes.join(" ")
+                        : (item as { note?: string | null }).note;
+                      const costText = (
+                        "cost_note" in item && item.cost_note
+                      )
+                        ? item.cost_note
+                        : (item as { cost_estimate?: string | null }).cost_estimate;
+                      const refText = (
+                        "source_refs" in item &&
+                        Array.isArray(item.source_refs) &&
+                        item.source_refs.length > 0
+                      )
+                        ? item.source_refs[0]
+                        : (item as { source_ref?: string | null }).source_ref;
+
+                      return (
+                        <li
+                          key={("id" in item && item.id) ? item.id : `${day.day_number}-${index}`}
+                          className="p-5 space-y-2.5 hover:bg-slate-50/40 dark:hover:bg-slate-850/40 transition-colors"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              {timeLabel && (
+                                <span className="inline-block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                  {timeLabel}
+                                </span>
+                              )}
+                              <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-base">
+                                {item.title}
+                              </h4>
+                            </div>
+                            <ProvenanceBadge provenance={item.provenance} />
+                          </div>
+
+                          {item.description && (
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                              {item.description}
+                            </p>
                           )}
-                          {item.cost_estimate && (
-                            <span>
-                              Cost estimate: <strong>{item.cost_estimate}</strong>
-                            </span>
+
+                          {(noteText || costText || refText) && (
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-slate-500 dark:text-slate-400">
+                              {noteText && (
+                                <span className="italic">
+                                  Tip: {noteText}
+                                </span>
+                              )}
+                              {costText && (
+                                <span>
+                                  Cost estimate: <strong>{costText}</strong>
+                                </span>
+                              )}
+                              {refText && (
+                                <span>
+                                  Ref: {refText}
+                                </span>
+                              )}
+                            </div>
                           )}
-                          {item.source_ref && (
-                            <span>
-                              Ref: {item.source_ref}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="p-5 text-sm text-slate-500 dark:text-slate-400">
-                  No activities scheduled for this day.
-                </p>
-              )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                );
+              })()}
             </div>
           ))}
         </div>

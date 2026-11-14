@@ -54,6 +54,38 @@ export interface WeatherSummary {
   horizon_note?: string | null;
 }
 
+export type DurationBasis = "provider" | "heuristic" | "unknown";
+
+export type CostStatus = "unknown" | "estimate" | "retrieved";
+
+export interface ActivityLocation {
+  name: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  source_ref?: string | null;
+}
+
+export interface DurationEstimate {
+  min_minutes?: number | null;
+  max_minutes?: number | null;
+  basis: DurationBasis;
+}
+
+export interface ItineraryActivity {
+  id: string;
+  title: string;
+  description?: string | null;
+  time_of_day?: TimeOfDay | string | null;
+  interest_tags?: string[];
+  location?: ActivityLocation | null;
+  duration_estimate?: DurationEstimate | null;
+  source_refs?: string[];
+  provenance: Provenance;
+  cost_status?: CostStatus;
+  cost_note?: string | null;
+  uncertainty_notes?: string[];
+}
+
 export interface ItineraryItem {
   title: string;
   time_of_day: TimeOfDay;
@@ -67,12 +99,16 @@ export interface ItineraryItem {
 export interface ItineraryDay {
   day_number: number;
   date: string;
-  items: ItineraryItem[];
+  activities?: ItineraryActivity[];
+  items?: ItineraryItem[];
+  uncertainty_notes?: string[];
 }
 
 export interface Itinerary {
+  schema_version?: number;
   days: ItineraryDay[];
   summary: string;
+  sources?: SourceInfo[];
   warnings?: string[];
 }
 
