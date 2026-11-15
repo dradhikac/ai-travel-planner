@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings, get_settings
+from app.db.session import get_engine, get_session_factory
 from app.main import create_app
 from app.schemas.trip import TripRequest
 
