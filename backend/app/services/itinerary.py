@@ -33,6 +33,11 @@ from app.schemas.trip import (
 )
 
 # Documented constants
+# Generator schedules items strictly below validation pace caps (PACE_ACTIVITY_CAPS
+# in app.agent.validation):
+# - relaxed: schedules 2 (validation cap: 3)
+# - balanced: schedules 3 (validation cap: 4)
+# - packed: schedules 4 (validation cap: 5)
 PACE_ITEM_COUNTS: Final[dict[PacePreference, int]] = {
     PacePreference.RELAXED: 2,
     PacePreference.BALANCED: 3,

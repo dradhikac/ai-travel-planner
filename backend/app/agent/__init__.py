@@ -32,6 +32,17 @@ from app.agent.tools import (
     get_tool,
     get_weather,
 )
+from app.agent.validation import (
+    VALIDATION_REGISTRY,
+    ValidationCode,
+    ValidationIssue,
+    ValidationRule,
+    ValidationSeverity,
+    has_critical,
+)
+from app.agent.validation import (
+    validate_itinerary as validate_itinerary_rules,
+)
 from app.schemas.trip import ToolActivity
 
 __all__ = [
@@ -44,13 +55,18 @@ __all__ = [
     "ScriptedGateway",
     "SecurityViolationError",
     "TOOL_REGISTRY",
+    "ToolActivity",
     "ToolCall",
     "ToolContractError",
     "ToolErrorCode",
     "ToolResult",
-    "ToolActivity",
     "ToolStatus",
     "TripState",
+    "VALIDATION_REGISTRY",
+    "ValidationCode",
+    "ValidationIssue",
+    "ValidationRule",
+    "ValidationSeverity",
     "WeatherArgs",
     "ask_clarification",
     "build_tool_activity",
@@ -63,10 +79,12 @@ __all__ = [
     "geocode_destination",
     "get_tool",
     "get_weather",
+    "has_critical",
     "parse_request",
     "plan_tool_calls",
     "respond",
     "run_workflow",
     "sanitize_url",
     "validate_itinerary",
+    "validate_itinerary_rules",
 ]
