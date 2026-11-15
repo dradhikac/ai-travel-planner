@@ -407,17 +407,34 @@ def upgrade_itinerary_v1_to_v2(v1: dict[str, Any]) -> dict[str, Any]:
 
 ## 5. Deterministic Validation Rules Catalog
 
-Phase 4 implements deterministic validation rules in `backend/app/agent/validation.py` [PLANNED]. Every itinerary is audited against this catalog prior to final response packaging.
+Phase 4 implements deterministic validation rules in `backend/app/agent/validation.py` [IMPLEMENTED in feature/phase4-validation-rules]. Every itinerary is audited against this catalog prior to final response packaging.
+
+### Registry Architecture & Determinism Guarantees
+
+Rules are structured as an extensible registry of `ValidationRule` objects:
+- **Rule Signature**: Pure function `(itinerary: ItineraryV2, request: TripRequest | None, tool_results: Sequence[ToolResult] | None) -> list[ValidationIssue]`
+- **Deterministic Issue Ordering**: Issues returned by `validate_itinerary` are deterministically sorted by:
+  1. `day_number`: `None` first (root-level issues), then ascending `1..N`
+  2. `severity`: `CRITICAL` (0) before `WARNING` (1)
+  3. `code`: Alphabetical by rule code string
+  4. `activity_id`: Empty string if None
+  5. `message`: Sanitized message string
+- **Message Sanitization**: Issue messages and repair hints strip control characters, newlines, and prompt injection delimiters, and truncate embedded activity/interest names to 40-50 characters to prevent prompt echo or sensitive data leakage.
+- **Critical Status Checking**: Helper function `has_critical(issues: Sequence[ValidationIssue]) -> bool` returns `True` if any issue has severity `CRITICAL`.
 
 ### Validation Catalog Table
 
 | Rule Code | Severity | Trigger Condition | Automated Repair Action |
 | :--- | :---: | :--- | :--- |
-| `DATE_RANGE_MISMATCH` | **CRITICAL** | Total days != trip duration, dates do not match `[start_date, end_date]`, or intermediate dates are missing. | Prune days outside trip date bounds. Insert empty placeholder day shells for missing dates and schedule default activities. |
-| `DUPLICATE_ACTIVITY` | **WARNING** | Normalized activity title and location match an already scheduled activity in the itinerary. | Remove redundant activity. Substitute with an alternative suggestion matching one of the user's travel interests. |
-| `MAX_DAILY_ACTIVITIES` | **WARNING** | Daily activity count exceeds configured pace threshold: <br> • `relaxed`: max 3 <br> • `balanced`: max 4 <br> • `packed`: max 5 | Prune lowest-priority activities on the overloaded day. Optionally redistribute to an under-scheduled day if within same city. |
-| `MISSING_REQUIRED_INTEREST` | **WARNING** | A user interest specified in `TripRequest.interests` has 0 activities tagged with that interest across all days. | Replace a generic generated activity with an activity tagged with the missing interest. |
-| `MISSING_SOURCE_METADATA` | **CRITICAL** | Activity marked `provenance='retrieved'` has no `source_refs`, or references a source lacking `provider`, `fetched_at`, `attribution`, or `data_origin`. | Downgrade activity provenance to `GENERATED_SUGGESTION` and append uncertainty note. |
+| `DATE_RANGE_MISMATCH` | **CRITICAL** | Total days != trip duration, dates do not match `[start_date, end_date]`, intermediate dates missing, or `day_number` sequence is not strictly `1..N`. | Prune days outside trip date bounds. Insert empty placeholder day shells for missing dates and schedule default activities. |
+| `DUPLICATE_ACTIVITY` | **WARNING** (1-2 duplicates)<br>**CRITICAL** (≥ 3 duplicates) | Normalized activity title and location match an already scheduled activity. Repeated meal/dining/rest categories (e.g. tagged `food`, `dining`, `meal`, `rest`, `breakfast`) are exempt. | Remove redundant activity. Substitute with an alternative suggestion matching one of the traveler's interests. |
+| `MAX_DAILY_ACTIVITIES` | **CRITICAL** | Daily activity count exceeds configured pace threshold: <br> • `relaxed`: max 3 <br> • `balanced`: max 4 <br> • `packed`: max 5 | Prune lowest-priority activities on the overloaded day. Optionally redistribute to an under-scheduled day if within same city. |
+| `MISSING_REQUIRED_INTEREST` | **WARNING** | A user interest in `TripRequest.interests` has 0 activities tagged with that exact interest. **Synonyms are NOT guessed** (exact tag match enforced). If no template supports an interest (e.g. "scuba"), records an uncertainty note on the itinerary instead of failing. | Replace a generic generated activity with an activity tagged with the missing interest. If unsupported, uncertainty note is retained. |
+| `MISSING_SOURCE_METADATA` | **CRITICAL** | Activity marked `provenance='retrieved'` or `cost_status='retrieved'` lacks `source_refs`, references an unknown source URL, or a source lacks `provider`, `fetched_at`, `attribution`, or `data_origin`. | Downgrade activity provenance to `GENERATED_SUGGESTION` and append uncertainty note. |
+| `MISSING_PROVENANCE` | **CRITICAL** | Activity lacks a valid `Provenance` classification (`retrieved`, `generated_suggestion`, `estimate`, `unknown`). | Assign `Provenance.GENERATED_SUGGESTION` to the activity. |
+| `BOOKING_LANGUAGE_DETECTED` | **CRITICAL** | Summary, day notes, or activities contain prohibited transaction terminology claiming bookings, reservations, paid tickets, or cancellation policies. | Remove transactional claims; clarify that activities are indicative and non-bookable suggestions. |
+| `WEATHER_WITHOUT_TOOL_SUCCESS` | **CRITICAL** | Itinerary contains weather forecast claims without a successful weather tool invocation (`status == ToolStatus.OK`). | Remove weather claims or re-invoke weather forecast tool. |
+| `INVALID_COST_STATUS` | **CRITICAL** | Activity cost_status is not in (`unknown`, `estimate`, `retrieved`) or claims live guaranteed checkout prices in `cost_note`. | Classify as estimate/unknown and state non-booking status. |
 | `BUDGET_FLOOR_VIOLATION` | **CRITICAL** | Per-person-per-day budget allocation is below the currency's Hard Floor without user confirmation. | Halt at clarification seam with `budget_conflict`. If confirmed by user, attach budget warning. |
 
 ---

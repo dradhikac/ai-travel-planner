@@ -17,6 +17,12 @@ from app.agent.gateway import ModelGateway, RuleBasedGateway
 from app.agent.state import Intent, RunStatus, TripState
 from app.agent.tools.contracts import ToolCall, ToolResult, ToolStatus
 from app.agent.tools.registry import TOOL_REGISTRY
+from app.agent.validation import (
+    ValidationSeverity,
+)
+from app.agent.validation import (
+    validate_itinerary as run_itinerary_validation,
+)
 from app.core.config import MAX_TOOL_CALLS
 from app.schemas.provider import GeocodeResult, WeatherSummary
 from app.schemas.trip import ToolActivity, TripRequest, TripResponse
@@ -660,19 +666,41 @@ def draft_itinerary(state: TripState) -> dict[str, Any]:
 
 
 # ==============================================================================
-# 7. Validation Placeholder Node (Completed in Prompt 18)
+# 7. Validation Node (Deterministic Rule Catalog)
 # ==============================================================================
 
 
 def validate_itinerary(state: TripState) -> dict[str, Any]:
-    """Validate synthesized itinerary against pacing and constraint rules.
+    """Validate synthesized itinerary against deterministic validation rules."""
+    if state.itinerary_draft is None:
+        return {
+            "step_count": state.step_count + 1,
+            "validation_issues": ["No itinerary draft to validate."],
+        }
 
-    NOTE: Completed in Prompt 18. Passes through and records validation skipped.
-    """
+    issues = run_itinerary_validation(
+        state.itinerary_draft,
+        request=state.trip_request,
+        tool_results=state.tool_results,
+    )
+    formatted = [
+        f"[{issue.severity.value.upper()}] {issue.code}: {issue.message}"
+        for issue in issues
+    ]
+    new_warnings = list(state.warnings)
+    if issues:
+        critical_count = sum(
+            1 for i in issues if i.severity == ValidationSeverity.CRITICAL
+        )
+        new_warnings.append(
+            f"Itinerary validation identified {len(issues)} issue(s) "
+            f"({critical_count} critical)."
+        )
+
     return {
         "step_count": state.step_count + 1,
-        "warnings": list(state.warnings)
-        + ["Itinerary validation did not run (placeholder completed in Prompt 18)."],
+        "validation_issues": formatted,
+        "warnings": new_warnings,
     }
 
 
