@@ -10,11 +10,23 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Final
 
-from app.schemas.provider import GeocodeResult, Provenance, WeatherDay, WeatherSummary
+from app.schemas.itinerary_v2 import (
+    ActivityLocation,
+    CostStatus,
+    DurationBasis,
+    DurationEstimate,
+    ItineraryActivity,
+)
+from app.schemas.provider import (
+    GeocodeResult,
+    Provenance,
+    SourceInfo,
+    WeatherDay,
+    WeatherSummary,
+)
 from app.schemas.trip import (
     Itinerary,
     ItineraryDay,
-    ItineraryItem,
     PacePreference,
     TimeOfDay,
     TripRequest,
@@ -489,26 +501,42 @@ def generate_itinerary(
             )
             weather_source_url = None
 
-        day_items: list[ItineraryItem] = []
+        day_activities: list[ItineraryActivity] = []
 
         # Optional dedicated weather item
         if weather_as_item:
             w_prov = (
                 Provenance.RETRIEVED if day_weather is not None else Provenance.UNKNOWN
             )
-            day_items.append(
-                ItineraryItem(
+            w_sources = (
+                [weather_source_url]
+                if (day_weather is not None and weather_source_url)
+                else []
+            )
+            day_activities.append(
+                ItineraryActivity(
+                    id=f"day_{day_idx}_act_1",
                     title=f"Weather Briefing: {destination_label}",
-                    time_of_day=TimeOfDay.MORNING,
                     description=weather_desc,
-                    provenance=w_prov,
-                    source_ref=weather_source_url,
-                    note=(
-                        f"Retrieved from {weather.source.provider}."
-                        if day_weather is not None and weather is not None
-                        else "No weather data retrieved."
+                    time_of_day=TimeOfDay.MORNING.value,
+                    interest_tags=["weather"],
+                    location=None,
+                    duration_estimate=DurationEstimate(
+                        min_minutes=5,
+                        max_minutes=15,
+                        basis=DurationBasis.HEURISTIC,
                     ),
-                    cost_estimate=None,
+                    source_refs=w_sources,
+                    provenance=w_prov,
+                    cost_status=CostStatus.UNKNOWN,
+                    cost_note=None,
+                    uncertainty_notes=[
+                        (
+                            f"Retrieved from {weather.source.provider}."
+                            if day_weather is not None and weather is not None
+                            else "No weather data retrieved."
+                        )
+                    ],
                 )
             )
 
@@ -543,16 +571,51 @@ def generate_itinerary(
                         f"High rain probability ({rain_prob}%); "
                         "indoor activities prioritized."
                     )
+            elif day_weather is None:
+                item_notes.append(
+                    "Weather forecast is unknown for this date. "
+                    "Check closer to departure date."
+                )
 
-            day_items.append(
-                ItineraryItem(
+            act_id = f"day_{day_idx}_act_{len(day_activities) + 1}"
+            source_refs = (
+                [weather_source_url]
+                if (slot_idx == 0 and weather_source_url and day_weather is not None)
+                else []
+            )
+
+            cost_status = (
+                CostStatus.ESTIMATE if budget_allocation_text else CostStatus.UNKNOWN
+            )
+            cost_note = budget_allocation_text if budget_allocation_text else None
+
+            dest_location: ActivityLocation | None = None
+            if isinstance(destination, GeocodeResult):
+                dest_location = ActivityLocation(
+                    name=destination.name,
+                    latitude=destination.latitude,
+                    longitude=destination.longitude,
+                    source_ref=destination.source.url if destination.source else None,
+                )
+
+            day_activities.append(
+                ItineraryActivity(
+                    id=act_id,
                     title=title,
-                    time_of_day=time_slot,
                     description=description,
+                    time_of_day=time_slot.value,
+                    interest_tags=[tmpl.category],
+                    location=dest_location,
+                    duration_estimate=DurationEstimate(
+                        min_minutes=60,
+                        max_minutes=120,
+                        basis=DurationBasis.HEURISTIC,
+                    ),
+                    source_refs=source_refs,
                     provenance=Provenance.GENERATED_SUGGESTION,
-                    source_ref=weather_source_url if slot_idx == 0 else None,
-                    note=" ".join(item_notes),
-                    cost_estimate=budget_allocation_text,
+                    cost_status=cost_status,
+                    cost_note=cost_note,
+                    uncertainty_notes=item_notes,
                 )
             )
 
@@ -560,7 +623,7 @@ def generate_itinerary(
             ItineraryDay(
                 day_number=day_idx,
                 date=day_date,
-                items=day_items,
+                activities=day_activities,
             )
         )
 
@@ -573,8 +636,17 @@ def generate_itinerary(
     if len(summary_text) > 500:
         summary_text = summary_text[:497] + "..."
 
+    sources: list[SourceInfo] = []
+    if weather is not None and weather.source is not None:
+        sources.append(weather.source)
+    if isinstance(destination, GeocodeResult) and destination.source is not None:
+        if destination.source not in sources:
+            sources.append(destination.source)
+
     return Itinerary(
+        schema_version=2,
         days=itinerary_days,
         summary=summary_text,
+        sources=sources,
         warnings=warnings,
     )
