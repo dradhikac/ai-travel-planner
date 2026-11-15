@@ -14,16 +14,19 @@ from pydantic import ValidationError
 
 from app.agent.errors import ToolErrorCode
 from app.agent.gateway import ModelGateway, RuleBasedGateway
+from app.agent.partial import build_safe_partial_result
 from app.agent.state import Intent, RunStatus, TripState
 from app.agent.tools.contracts import ToolCall, ToolResult, ToolStatus
 from app.agent.tools.registry import TOOL_REGISTRY
 from app.agent.validation import (
     ValidationSeverity,
+    has_critical,
 )
 from app.agent.validation import (
     validate_itinerary as run_itinerary_validation,
 )
 from app.core.config import MAX_TOOL_CALLS
+from app.schemas.itinerary_v2 import parse_itinerary_payload
 from app.schemas.provider import GeocodeResult, WeatherSummary
 from app.schemas.trip import ToolActivity, TripRequest, TripResponse
 from app.services.itinerary import generate_itinerary
@@ -365,7 +368,7 @@ def check_required_fields(state: TripState) -> dict[str, Any]:
     elif intent == Intent.UNSUPPORTED:
         next_status = RunStatus.FAILED
     else:
-        next_status = RunStatus.PARTIAL
+        next_status = state.status
 
     return {
         "step_count": state.step_count + 1,
@@ -652,7 +655,7 @@ def draft_itinerary(state: TripState) -> dict[str, Any]:
         except Exception:
             weather_arg = None
 
-    draft = generate_itinerary(
+    draft = state.itinerary_draft or generate_itinerary(
         request=trip_req,
         destination=dest_arg,
         weather=weather_arg,
@@ -705,7 +708,124 @@ def validate_itinerary(state: TripState) -> dict[str, Any]:
 
 
 # ==============================================================================
-# 8. Response Packaging Node
+# 8. Itinerary Repair Node
+# ==============================================================================
+
+
+def repair_itinerary(
+    state: TripState,
+    gateway: ModelGateway | None = None,
+) -> dict[str, Any]:
+    """Execute bounded itinerary repair via model gateway.
+
+    Strict security & privacy bounds:
+    - Passes ONLY structured issues and minimal itinerary JSON to gateway.repair.
+    - Never passes user message, request IDs, secrets, or raw provider payloads.
+    - Treats gateway output as UNTRUSTED: checks payload size, parses schema,
+      and re-validates. If unparseable or oversized, candidate is rejected and
+      previous draft is retained.
+    """
+    if state.itinerary_draft is None:
+        return {
+            "step_count": state.step_count + 1,
+            "repair_attempts": state.repair_attempts + 1,
+        }
+
+    active_gateway = gateway or RuleBasedGateway()
+    current_issues = run_itinerary_validation(
+        state.itinerary_draft,
+        request=state.trip_request,
+        tool_results=state.tool_results,
+    )
+
+    structured_issues = [
+        {
+            "code": str(i.code),
+            "day_number": i.day_number,
+            "activity_id": i.activity_id,
+            "repair_hint": i.repair_hint,
+            "severity": i.severity.value,
+        }
+        for i in current_issues
+    ]
+
+    minimal_itinerary = state.itinerary_draft.model_dump(mode="json")
+    warnings = list(state.warnings)
+
+    try:
+        raw_repaired = active_gateway.repair(
+            itinerary=minimal_itinerary,
+            issues=structured_issues,
+        )
+
+        if isinstance(raw_repaired, str) and len(raw_repaired) > 250_000:
+            warnings.append(
+                "Repair output exceeded safety size bounds; candidate rejected."
+            )
+            repaired_draft = None
+        elif isinstance(raw_repaired, str):
+            import json
+
+            parsed_dict = json.loads(raw_repaired)
+            repaired_draft = parse_itinerary_payload(parsed_dict)
+        elif isinstance(raw_repaired, dict):
+            repaired_draft = parse_itinerary_payload(raw_repaired)
+        else:
+            repaired_draft = None
+    except Exception:
+        warnings.append(
+            "Repair attempt produced invalid or unparseable output; "
+            "retaining previous draft."
+        )
+        repaired_draft = None
+
+    current_crit_sig = sorted(
+        [
+            f"{i.code}:{i.day_number}:{i.activity_id}"
+            for i in current_issues
+            if i.severity == ValidationSeverity.CRITICAL
+        ]
+    )
+
+    return {
+        "step_count": state.step_count + 1,
+        "repair_attempts": state.repair_attempts + 1,
+        "itinerary_draft": repaired_draft or state.itinerary_draft,
+        "last_critical_issues": current_crit_sig,
+        "warnings": warnings,
+    }
+
+
+# ==============================================================================
+# 9. Safe Partial Result Node
+# ==============================================================================
+
+
+def build_partial_result_node(state: TripState) -> dict[str, Any]:
+    """Construct a safe partial itinerary when repair attempts are exhausted."""
+    current_issues = run_itinerary_validation(
+        state.itinerary_draft,
+        request=state.trip_request,
+        tool_results=state.tool_results,
+    )
+    partial_draft, status, extra_warnings = build_safe_partial_result(
+        state.itinerary_draft,
+        request=state.trip_request,
+        tool_results=state.tool_results,
+        issues=current_issues,
+    )
+    new_warnings = list(state.warnings) + extra_warnings
+    return {
+        "step_count": state.step_count + 1,
+        "itinerary_draft": partial_draft,
+        "status": status,
+        "is_partial": True,
+        "warnings": new_warnings,
+    }
+
+
+# ==============================================================================
+# 10. Response Packaging Node
 # ==============================================================================
 
 
@@ -888,6 +1008,27 @@ def respond(
             and r.data_origin in ("live", "mock")
         ]
 
+        # Final guard: NEVER return as COMPLETED if critical issues exist!
+        current_issues = run_itinerary_validation(
+            state.itinerary_draft,
+            request=state.trip_request,
+            tool_results=state.tool_results,
+        )
+        has_crit = has_critical(current_issues)
+
+        if has_crit:
+            final_status = (
+                RunStatus.FAILED
+                if state.status == RunStatus.FAILED
+                else RunStatus.PARTIAL
+            )
+        elif weather_failed or state.is_partial or state.status == RunStatus.PARTIAL:
+            final_status = RunStatus.PARTIAL
+        elif state.status == RunStatus.FAILED:
+            final_status = RunStatus.FAILED
+        else:
+            final_status = RunStatus.COMPLETED
+
         trip_response = TripResponse(
             id=uuid4(),
             request=state.trip_request,
@@ -896,10 +1037,14 @@ def respond(
             sources=sources,
             tool_activity=activity_entries,
             warnings=warnings,
+            metadata={
+                "run_status": final_status.value,
+                "repair_attempts": state.repair_attempts,
+                "step_count": state.step_count,
+                "validation_issues_count": len(state.validation_issues),
+            },
             created_at=datetime.now(UTC),
         )
-
-        final_status = RunStatus.PARTIAL if weather_failed else RunStatus.COMPLETED
 
         return {
             "step_count": state.step_count + 1,
