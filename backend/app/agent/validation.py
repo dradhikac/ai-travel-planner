@@ -1154,3 +1154,7 @@ def validate_itinerary(
 def has_critical(issues: Sequence[ValidationIssue]) -> bool:
     """Return True if any issue in the sequence has CRITICAL severity."""
     return any(issue.severity == ValidationSeverity.CRITICAL for issue in issues)
+
+
+# Convenience alias for consumers avoiding collisions with agent graph node
+run_itinerary_validation = validate_itinerary

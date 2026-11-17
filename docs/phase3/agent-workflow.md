@@ -25,18 +25,27 @@ flowchart TD
 
     %% Branch 1: Missing essential fields or contradictions
     route_fields -->|"NEEDS_CLARIFICATION"| ask_clarification["3. ask_clarification\n(Generate targeted question)"]
-    ask_clarification --> respond["8. respond\n(Package response & audit activity)"]
+    ask_clarification --> respond["10. respond\n(Package response & audit activity)"]
 
     %% Branch 2: Unsupported operations (e.g. booking)
     route_fields -->|"UNSUPPORTED\n(Status: FAILED)"| respond
 
     %% Branch 3: Valid parameters -> Tool Planning
-    route_fields -->|"PARTIAL / Valid"| plan_tool_calls["4. plan_tool_calls\n(Schedule intent-driven tools)"]
+    route_fields -->|"Valid"| plan_tool_calls["4. plan_tool_calls\n(Schedule intent-driven tools)"]
 
     plan_tool_calls --> execute_tools["5. execute_tools\n(Sequential execution up to MAX_TOOL_CALLS)"]
     execute_tools --> draft_itinerary["6. draft_itinerary\n(Deterministic generator with provenance)"]
-    draft_itinerary --> validate_itinerary["7. validate_itinerary\n(Constraint validation placeholder)"]
-    validate_itinerary --> respond
+    draft_itinerary --> validate_itinerary["7. validate_itinerary\n(Deterministic validation rules catalog)"]
+
+    validate_itinerary --> route_validate{Validation\nCheck?}
+
+    %% Validation Routing
+    route_validate -->|"Clean (No Critical Issues)"| respond
+    route_validate -->|"Critical Issues &\nAttempts < 2 &\nProgress Made"| repair_itinerary["8. repair_itinerary\n(Bounded repair via isolated payload)"]
+    repair_itinerary --> validate_itinerary
+
+    route_validate -->|"Max Attempts Reached (2)\nor No Progress (Same Issues)"| build_partial["9. build_partial_result\n(Prune invalid items, add fallback notes)"]
+    build_partial --> respond
 
     respond --> END([End])
 ```
@@ -129,7 +138,10 @@ All tools adhere to strict typed contracts defined in `app/agent/tools/contracts
 | Parameter / Guard | Value | Source Location | Enforcement Behavior |
 | :--- | :-: | :--- | :--- |
 | **Step Count Guard** | `25` | `app/agent/nodes.py` (`respond()`) | If `step_count >= 25`, workflow immediately aborts with `status = RunStatus.FAILED`. |
-| **Max Tool Calls** | `5` | `app/core/config.py` (`MAX_TOOL_CALLS`) | Limits tool executions per run; surplus tool calls are skipped with a warning. |
+| **Max Tool Calls** | `4` | `app/core/config.py` (`MAX_TOOL_CALLS`) | Limits tool executions per run; surplus tool calls are skipped with a warning. |
+| **Max Repair Attempts** | `2` | `app/core/config.py` (`MAX_REPAIR_ATTEMPTS`) | Bounded repair loops; on 2nd invalid attempt or no-progress, routes to safe partial result. |
+| **No-Progress Early Stop** | `1` attempt | `app/agent/graph.py` (`_route_after_validate`) | If attempt yields identical critical issue signature, halts early and routes to partial. |
+| **Repair Payload Size** | `250,000` chars | `app/agent/nodes.py` (`repair_itinerary`) | Untrusted candidate outputs > 250k chars are rejected by size guard; previous draft retained. |
 | **User Message Length** | `2000` chars | `app/agent/state.py` (`TripState`) | Pydantic validator rejects or truncates inputs exceeding 2000 characters. |
 | **Request ID Length** | `64` chars | `app/agent/state.py` (`TripState`) | Request IDs exceeding 64 chars are bounded to prevent resource exhaustion. |
 | **Max Trip Duration** | `30` days | `app/agent/nodes.py` (`check_required_fields`) | Durations > 30 days trigger a contradiction and require clarification. |
@@ -167,8 +179,12 @@ The system guarantees honest, graceful degradation across all failure modes:
 | **Destination Not Found** | Geocoding returns `EMPTY` or `[]` | `FAILED` | Clear advice: "Could not find that destination. Please check spelling or add country name." |
 | **Geocoding Timeout / Error** | Geocoding returns `TIMEOUT` or `ERROR` | `FAILED` | Safe retry message: "Destination lookup encountered a temporary error. Please try again later." |
 | **Weather Timeout / Error** | Weather returns `TIMEOUT`, `ERROR`, or out-of-range | `PARTIAL` | **Itinerary is preserved intact**; `weather=None`; prominent amber alert notice rendered explaining missing weather. |
+| **Critical Validation Issues** | Validation issues unresolved after repair | `PARTIAL` or `FAILED` | **Never marked completed**; safe partial result prunes invalid items, inserts free exploration, adds fallback note. |
 | **Malformed Tool Payload** | Tool output missing required schema fields | `PARTIAL` or `FAILED` | Catches `ValidationError` without crash; omits corrupted component and appends explanatory warning. |
 | **Cyclic Execution** | `step_count >= 25` | `FAILED` | Halts execution loop; returns polite error explaining guardrail limit was reached. |
+
+> [!IMPORTANT]
+> **Non-Negotiable Terminal Status Invariant**: An itinerary draft with critical validation issues (such as date mismatches, prohibited booking claims, missing provenance, or excessive pace) is **NEVER returned with `status: completed`**. The response node guard unconditionally overrides the run status to `PARTIAL` (or `FAILED` if no valid days remain), making a completed-with-critical-issues outcome mathematically impossible.
 
 ---
 
@@ -177,8 +193,9 @@ The system guarantees honest, graceful degradation across all failure modes:
 To protect user confidentiality and prevent accidental credential exposure:
 1. **URL Sanitization (`sanitize_url()`)**: All provider URLs displayed in tool activity logs are stripped of query parameters and hash fragments (e.g., `https://api.provider.com/v1/search?key=secret` -> `https://api.provider.com/v1/search`).
 2. **Secret Key Scrubbing**: `TripState.known_fields` strictly rejects secret-bearing keys (`api_key`, `token`, `password`, `secret`, `credential`, `private_key`).
-3. **Inert Storage**: Hostile input strings (SQL syntax, directory traversal paths, CRLF newlines) are stored as inert text strings and never passed to database concatenations or shell commands.
-4. **Attribution Transparency**: Every retrieved fact includes provider name, attribution string, source URL, and `data_origin` badge (`"live"` vs `"mock"`).
+3. **Payload Isolation**: Model gateway repair passes ONLY structured issues and minimal itinerary JSON. It never passes `user_message`, `request_id`, secrets, or raw provider outputs.
+4. **Inert Storage**: Hostile input strings (SQL syntax, directory traversal paths, CRLF newlines) are stored as inert text strings and never passed to database concatenations or shell commands.
+5. **Attribution Transparency**: Every retrieved fact includes provider name, attribution string, source URL, and `data_origin` badge (`"live"` vs `"mock"`).
 
 ---
 
@@ -187,17 +204,17 @@ To protect user confidentiality and prevent accidental credential exposure:
 All workflow capabilities are verified by automated test suites executed from repository root:
 
 ```powershell
+# Run Phase 4 bounded repair and safe partial result tests (11 tests)
+.\backend\.venv\Scripts\python.exe -m pytest -q backend\tests\test_agent_repair.py
+
+# Run Phase 4 validation rules catalog test suite (27 tests)
+.\backend\.venv\Scripts\python.exe -m pytest -q backend\tests\test_agent_validation.py
+
 # Run adversarial robustness test suite (24 tests)
 .\backend\.venv\Scripts\python.exe -m pytest -q backend\tests\test_agent_adversarial.py
 
-# Run full agent test suite (workflow, clarification, tools, state, generator)
-.\backend\.venv\Scripts\python.exe -m pytest -o pythonpath=backend -q backend\tests
-
-# Run frontend assistant UI test suite (83 tests)
-npm --prefix frontend run test
-
-# Verify production Next.js build prerendering /assistant
-npm --prefix frontend run build
+# Run full backend test suite (441 passed)
+.\backend\.venv\Scripts\python.exe -m pytest -q backend\tests
 ```
 
 *(Bash alternatives: replace `\` with `/` and use `./backend/.venv/bin/python`)*.

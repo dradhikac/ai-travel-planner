@@ -10,16 +10,19 @@ from app.agent.gateway import ModelGateway, RuleBasedGateway, ScriptedGateway
 from app.agent.graph import compile_agent_graph, create_agent_graph, run_workflow
 from app.agent.nodes import (
     ask_clarification,
+    build_partial_result_node,
     build_tool_activity,
     check_required_fields,
     draft_itinerary,
     execute_tools,
     parse_request,
     plan_tool_calls,
+    repair_itinerary,
     respond,
     sanitize_url,
     validate_itinerary,
 )
+from app.agent.partial import build_safe_partial_result
 from app.agent.state import Intent, RunStatus, TripState, create_fresh_trip_state
 from app.agent.tools import (
     TOOL_REGISTRY,
@@ -69,6 +72,8 @@ __all__ = [
     "ValidationSeverity",
     "WeatherArgs",
     "ask_clarification",
+    "build_partial_result_node",
+    "build_safe_partial_result",
     "build_tool_activity",
     "check_required_fields",
     "compile_agent_graph",
@@ -82,6 +87,7 @@ __all__ = [
     "has_critical",
     "parse_request",
     "plan_tool_calls",
+    "repair_itinerary",
     "respond",
     "run_workflow",
     "sanitize_url",
