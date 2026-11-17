@@ -96,7 +96,42 @@ class Settings(BaseSettings):
         description="Routing provider operating mode: live API or deterministic mock.",
     )
 
-    @field_validator("DATABASE_URL", "OPENROUTESERVICE_API_KEY", mode="before")
+    # Phase 4 Optional LLM Repair Gateway Settings (off by default)
+    LLM_PROVIDER: Literal["none", "openai", "anthropic", "custom"] = Field(
+        default="none",
+        description=(
+            "LLM provider for optional repair gateway: 'none' (default), "
+            "'openai', 'anthropic', 'custom'."
+        ),
+    )
+    LLM_API_KEY: str | None = Field(
+        default=None,
+        repr=False,
+        description="API key for optional LLM repair gateway (secret).",
+    )
+    LLM_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="Model identifier for optional LLM repair gateway.",
+    )
+    LLM_TIMEOUT_SECONDS: float = Field(
+        default=10.0,
+        ge=0.5,
+        le=120.0,
+        description="Request timeout in seconds for LLM repair calls.",
+    )
+    LLM_MAX_OUTPUT_TOKENS: int = Field(
+        default=2048,
+        ge=64,
+        le=8192,
+        description="Maximum output token bound for LLM repair responses.",
+    )
+
+    @field_validator(
+        "DATABASE_URL",
+        "OPENROUTESERVICE_API_KEY",
+        "LLM_API_KEY",
+        mode="before",
+    )
     @classmethod
     def empty_str_to_none(cls, v: str | None) -> str | None:
         if isinstance(v, str) and not v.strip():

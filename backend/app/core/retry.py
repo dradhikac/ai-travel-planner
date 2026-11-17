@@ -156,3 +156,107 @@ async def call_with_retry(
 
             # Sleep
             await sleep_fn(delay)
+
+
+def call_with_retry_sync(
+    operation: Callable[[], T],
+    policy: RetryPolicy | None = None,
+    *,
+    sleep: Callable[[float], None] | None = None,
+    clock: Callable[[], float] | None = None,
+    random_source: Callable[[float, float], float] | None = None,
+    on_event: Callable[[int, str, float], None] | None = None,
+) -> T:
+    """Execute a synchronous operation with bounded retry, backoff, and jitter.
+
+    Retries strictly when ProviderError.retryable is True (transient timeouts,
+    connection failures, 5xx outages, and rate limits with small Retry-After).
+    Non-retryable errors (auth failures, invalid requests, malformed responses)
+    and non-ProviderError exceptions fail immediately.
+
+    Args:
+        operation: Callable returning a result synchronously.
+        policy: Configured RetryPolicy (defaults to contract defaults).
+        sleep: Sync sleep double (defaults to time.sleep).
+        clock: Monotonic clock double (defaults to time.monotonic).
+        random_source: Random float generator double (defaults to random.uniform).
+        on_event: Callback invoked before each retry:
+            on_event(attempt, error_code, delay_ms).
+
+    Returns:
+        The successful result of operation.
+
+    Raises:
+        ProviderError: When retries are exhausted, budget is exceeded, or error
+            is non-retryable. err.attempts and err.details['attempts'] record the
+            total attempts executed.
+    """
+    eff_policy = policy if policy is not None else RetryPolicy()
+    sleep_fn = sleep if sleep is not None else time.sleep
+    clock_fn = clock if clock is not None else time.monotonic
+    random_fn = random_source if random_source is not None else random.uniform
+
+    start_time = clock_fn()
+    attempt = 0
+
+    while True:
+        attempt += 1
+        try:
+            return operation()
+
+        except ProviderError as err:
+            err.attempts = attempt
+            if not isinstance(err.details, dict):
+                err.details = {}
+            err.details["attempts"] = attempt
+
+            # Non-retryable provider errors fail immediately
+            if not err.retryable:
+                raise err
+
+            # Max retries exhausted
+            if attempt > eff_policy.max_retries:
+                raise err
+
+            # Determine delay
+            if (
+                err.code == ErrorCode.RATE_LIMITED
+                and err.retry_after_seconds is not None
+            ):
+                if err.retry_after_seconds > eff_policy.max_delay_seconds:
+                    err.retryable = False
+                    raise err
+                delay = err.retry_after_seconds
+            else:
+                backoff_exponent = attempt - 1
+                uncapped_delay = eff_policy.base_delay_seconds * (
+                    eff_policy.backoff_factor**backoff_exponent
+                )
+                capped_delay = min(eff_policy.max_delay_seconds, uncapped_delay)
+                if eff_policy.jitter:
+                    delay = random_fn(0.0, capped_delay)
+                else:
+                    delay = capped_delay
+
+            # Verify total budget before sleeping
+            elapsed = clock_fn() - start_time
+            if (elapsed + delay) > eff_policy.total_budget_seconds:
+                err.details["budget_exhausted"] = True
+                raise err
+
+            # Notify diagnostic event callback
+            delay_ms = delay * 1000.0
+            code_str = (
+                err.code.value
+                if hasattr(err.code, "value")
+                else str(getattr(err, "error_code", err.code))
+            )
+            if on_event is not None:
+                on_event(attempt, code_str, delay_ms)
+
+            # Sleep
+            sleep_fn(delay)
+
+
+# Backwards compatibility alias matching Phase 4 design specifications
+retry_with_backoff = call_with_retry_sync
