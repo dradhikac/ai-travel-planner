@@ -13,8 +13,10 @@ def test_database_engine_unconfigured_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When DATABASE_URL is unset, get_engine and factory must return None."""
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "")
     get_settings.cache_clear()
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
     assert get_engine() is None
     assert get_session_factory() is None
 
@@ -23,8 +25,10 @@ def test_database_session_unconfigured_yields_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When unconfigured, get_session dependency must yield None."""
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "")
     get_settings.cache_clear()
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
     gen = get_session()
     session = next(gen)
     assert session is None

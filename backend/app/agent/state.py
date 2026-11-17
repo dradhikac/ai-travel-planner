@@ -123,10 +123,18 @@ class TripState(BaseModel):
             "Rule or constraint violations identified during itinerary validation"
         ),
     )
+    last_critical_issues: list[str] = Field(
+        default_factory=list,
+        description="Signatures of critical issues from previous repair attempt",
+    )
     repair_attempts: int = Field(
         default=0,
         ge=0,
         description="Number of repair loops attempted (capped by MAX_REPAIR_ATTEMPTS)",
+    )
+    is_partial: bool = Field(
+        default=False,
+        description="Flag indicating safe partial degradation was applied",
     )
     step_count: int = Field(
         default=0,

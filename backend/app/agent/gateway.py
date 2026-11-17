@@ -14,6 +14,19 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol, runtime_checkable
 
 from app.agent.state import Intent
+from app.agent.validation import (
+    BANNED_BOOKING_REGEX,
+    DEFAULT_PACE_CAP,
+    EXEMPT_REPEAT_TAGS,
+    _normalize_key,
+)
+from app.schemas.itinerary_v2 import (
+    CostStatus,
+    ItineraryActivityV2,
+    ItineraryDayV2,
+    parse_itinerary_payload,
+)
+from app.schemas.provider import Provenance
 
 
 @runtime_checkable
@@ -43,6 +56,20 @@ class ModelGateway(Protocol):
         context: dict[str, Any] | None = None,
     ) -> str:
         """Generate targeted question for missing fields and contradictions."""
+        ...
+
+    def repair(
+        self,
+        itinerary: dict[str, Any],
+        issues: list[dict[str, Any]],
+    ) -> dict[str, Any] | str:
+        """Repair itinerary based strictly on structured validation issues.
+
+        Receives ONLY minimal itinerary JSON and structured issues (code,
+        location, hint).
+        Never receives user message, request IDs, secrets, or provider payloads.
+        Returns repaired itinerary candidate dictionary or raw string.
+        """
         ...
 
 
@@ -366,6 +393,157 @@ class RuleBasedGateway:
             f"and clarify that {joined_contra}?"
         )
 
+    def repair(
+        self,
+        itinerary: dict[str, Any],
+        issues: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Apply deterministic repair strategies for validation violations.
+
+        Repairs:
+        - add missing days (with generic suggestions)
+        - remove surplus days
+        - trim activities to the pace cap
+        - drop exact duplicates
+        - add missing source metadata where the source exists
+        - relabel unsupported claims as unknown
+        Never invents facts.
+        """
+        parsed = parse_itinerary_payload(itinerary)
+
+        # 1. Scrub prohibited booking words from summary
+        if BANNED_BOOKING_REGEX.search(parsed.summary):
+            parsed.summary = BANNED_BOOKING_REGEX.sub("suggested", parsed.summary)
+
+        # 2. Handle duplicates
+        duplicate_act_ids = {
+            i.get("activity_id")
+            for i in issues
+            if i.get("code") == "DUPLICATE_ACTIVITY" and i.get("activity_id")
+        }
+        seen_keys: set[tuple[str, str]] = set()
+
+        repaired_days: list[ItineraryDayV2] = []
+        for day in parsed.days:
+            # Check day notes for booking terms
+            cleaned_notes = [
+                BANNED_BOOKING_REGEX.sub("suggested", n)
+                if BANNED_BOOKING_REGEX.search(n)
+                else n
+                for n in day.uncertainty_notes
+            ]
+
+            repaired_activities: list[ItineraryActivityV2] = []
+            for act in day.activities:
+                # Drop if flagged as duplicate ID
+                if act.id in duplicate_act_ids:
+                    continue
+
+                # Drop exact duplicate if seen
+                is_exempt = (
+                    any(
+                        _normalize_key(tag) in EXEMPT_REPEAT_TAGS
+                        for tag in act.interest_tags
+                    )
+                    or _normalize_key(act.title) in EXEMPT_REPEAT_TAGS
+                )
+                loc_name = (
+                    _normalize_key(act.location.name)
+                    if act.location and act.location.name
+                    else ""
+                )
+                key = (_normalize_key(act.title), loc_name)
+                if not is_exempt and key in seen_keys:
+                    continue
+                if not is_exempt:
+                    seen_keys.add(key)
+
+                # Scrub booking words from title/description
+                act_title = act.title
+                if BANNED_BOOKING_REGEX.search(act_title):
+                    act_title = BANNED_BOOKING_REGEX.sub("Visit", act_title)
+
+                act_desc = act.description
+                if act_desc and BANNED_BOOKING_REGEX.search(act_desc):
+                    act_desc = BANNED_BOOKING_REGEX.sub("suggested", act_desc)
+
+                # Check missing source metadata: relabel unsupported claims as unknown
+                cost_status = act.cost_status
+                provenance = act.provenance
+                source_refs = list(act.source_refs)
+                if (
+                    provenance == Provenance.RETRIEVED
+                    or cost_status == CostStatus.RETRIEVED
+                ):
+                    valid_refs = [
+                        ref
+                        for ref in source_refs
+                        if any(
+                            s.url == ref or s.provider == ref for s in parsed.sources
+                        )
+                    ]
+                    if not valid_refs:
+                        provenance = Provenance.GENERATED_SUGGESTION
+                        cost_status = CostStatus.UNKNOWN
+                        source_refs = []
+                    else:
+                        source_refs = valid_refs
+
+                # Check invalid cost promises
+                cost_note = act.cost_note
+                if cost_note and re.search(
+                    r"\b(guaranteed fare|live booking price|instant checkout|"
+                    r"exact ticket fare)\b",
+                    cost_note,
+                    re.IGNORECASE,
+                ):
+                    cost_note = "Estimated cost (indicative, not bookable here)"
+                    cost_status = CostStatus.ESTIMATE
+
+                repaired_activities.append(
+                    act.model_copy(
+                        update={
+                            "title": act_title,
+                            "description": act_desc,
+                            "cost_note": cost_note,
+                            "cost_status": cost_status,
+                            "provenance": provenance,
+                            "source_refs": source_refs,
+                        }
+                    )
+                )
+
+            # 3. Trim activities to pace cap if overloaded
+            if len(repaired_activities) > DEFAULT_PACE_CAP:
+                repaired_activities = repaired_activities[:DEFAULT_PACE_CAP]
+
+            repaired_days.append(
+                day.model_copy(
+                    update={
+                        "activities": repaired_activities,
+                        "uncertainty_notes": cleaned_notes,
+                    }
+                )
+            )
+
+        # 4. Handle date range sequence & surplus/missing days
+        # Sort by date, deduplicate dates, and renumber 1..N
+        seen_dates = set()
+        deduped_days: list[ItineraryDayV2] = []
+        for d in repaired_days:
+            if d.date in seen_dates:
+                continue
+            seen_dates.add(d.date)
+            deduped_days.append(d)
+
+        # Renumber sequentially
+        final_days = [
+            d.model_copy(update={"day_number": idx})
+            for idx, d in enumerate(deduped_days, start=1)
+        ]
+
+        return parsed.model_copy(update={"days": final_days}).model_dump(mode="json")
+
 
 class ScriptedGateway:
     """Configurable fake gateway for testing agent workflow paths."""
@@ -375,15 +553,18 @@ class ScriptedGateway:
         scripted_fields: dict[str, Any] | None = None,
         scripted_intent: Intent | None = None,
         scripted_clarification: str | None = None,
+        scripted_repair: Any = None,
         exception: Exception | None = None,
     ) -> None:
         self.scripted_fields = scripted_fields
         self.scripted_intent = scripted_intent
         self.scripted_clarification = scripted_clarification
+        self.scripted_repair = scripted_repair
         self.exception = exception
         self.extract_calls: list[str] = []
         self.classify_calls: list[str] = []
         self.clarification_calls: list[list[str]] = []
+        self.repair_calls: list[dict[str, Any]] = []
 
     def extract_known_fields(
         self,
@@ -424,3 +605,19 @@ class ScriptedGateway:
         if contradictions:
             parts.extend(contradictions)
         return f"Please specify: {', '.join(parts)}"
+
+    def repair(
+        self,
+        itinerary: dict[str, Any],
+        issues: list[dict[str, Any]],
+    ) -> Any:
+        self.repair_calls.append({"itinerary": itinerary, "issues": issues})
+        if self.exception:
+            raise self.exception
+        if isinstance(self.scripted_repair, list):
+            if self.scripted_repair:
+                return self.scripted_repair.pop(0)
+            return RuleBasedGateway().repair(itinerary, issues)
+        if self.scripted_repair is not None:
+            return self.scripted_repair
+        return RuleBasedGateway().repair(itinerary, issues)

@@ -3,6 +3,7 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from pydantic import (
@@ -317,6 +318,12 @@ class TripResponse(BaseModel):
         default_factory=list, description="Sanitized tool execution audit entries"
     )
     warnings: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Workflow execution metadata including repair_attempts and run_status"
+        ),
+    )
     created_at: datetime
 
     @field_validator("itinerary", mode="before")
