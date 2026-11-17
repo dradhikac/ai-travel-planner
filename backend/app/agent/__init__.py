@@ -6,7 +6,13 @@ from app.agent.errors import (
     ToolContractError,
     ToolErrorCode,
 )
-from app.agent.gateway import ModelGateway, RuleBasedGateway, ScriptedGateway
+from app.agent.gateway import (
+    LLMRepairGateway,
+    ModelGateway,
+    RuleBasedGateway,
+    ScriptedGateway,
+    get_default_gateway,
+)
 from app.agent.graph import compile_agent_graph, create_agent_graph, run_workflow
 from app.agent.nodes import (
     ask_clarification,
@@ -52,6 +58,7 @@ __all__ = [
     "AgentError",
     "GeocodeArgs",
     "Intent",
+    "LLMRepairGateway",
     "ModelGateway",
     "RuleBasedGateway",
     "RunStatus",
@@ -82,6 +89,7 @@ __all__ = [
     "draft_itinerary",
     "execute_tools",
     "geocode_destination",
+    "get_default_gateway",
     "get_tool",
     "get_weather",
     "has_critical",

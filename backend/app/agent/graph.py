@@ -13,7 +13,7 @@ from typing import Any
 from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 
-from app.agent.gateway import ModelGateway, RuleBasedGateway
+from app.agent.gateway import ModelGateway, get_default_gateway
 from app.agent.nodes import (
     ask_clarification,
     build_partial_result_node,
@@ -61,7 +61,7 @@ def create_agent_graph(
     Returns:
         Uncompiled StateGraph instance parameterized with injected dependencies.
     """
-    active_gateway = gateway or RuleBasedGateway()
+    active_gateway = gateway or get_default_gateway()
     active_tools = tools if tools is not None else TOOL_REGISTRY
 
     # 1. Define node wrappers bound with injected dependencies

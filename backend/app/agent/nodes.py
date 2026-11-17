@@ -13,7 +13,7 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from app.agent.errors import ToolErrorCode
-from app.agent.gateway import ModelGateway, RuleBasedGateway
+from app.agent.gateway import ModelGateway, RuleBasedGateway, get_default_gateway
 from app.agent.partial import build_safe_partial_result
 from app.agent.state import Intent, RunStatus, TripState
 from app.agent.tools.contracts import ToolCall, ToolResult, ToolStatus
@@ -731,7 +731,7 @@ def repair_itinerary(
             "repair_attempts": state.repair_attempts + 1,
         }
 
-    active_gateway = gateway or RuleBasedGateway()
+    active_gateway = gateway or get_default_gateway()
     current_issues = run_itinerary_validation(
         state.itinerary_draft,
         request=state.trip_request,
@@ -757,6 +757,8 @@ def repair_itinerary(
             itinerary=minimal_itinerary,
             issues=structured_issues,
         )
+        if getattr(active_gateway, "last_warning", None):
+            warnings.append(active_gateway.last_warning)
 
         if isinstance(raw_repaired, str) and len(raw_repaired) > 250_000:
             warnings.append(
