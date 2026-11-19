@@ -123,6 +123,26 @@ class RuleBasedGateway:
         "sunny",
     )
 
+    # Keywords identifying route and navigation inquiries
+    ROUTE_KEYWORDS: tuple[str, ...] = (
+        "route",
+        "directions",
+        "how to get",
+        "how do i get",
+        "walk from",
+        "walking from",
+        "drive from",
+        "driving from",
+        "bike from",
+        "cycling from",
+        "distance between",
+        "how far",
+        "travel between",
+        "path from",
+        "way from",
+        "navigation",
+    )
+
     # Common cities for deterministic regex extraction
     KNOWN_DESTINATIONS: tuple[str, ...] = (
         "Tokyo",
@@ -145,6 +165,7 @@ class RuleBasedGateway:
         "Dublin",
         "Cairo",
         "Bangkok",
+        "Munich",
     )
 
     def extract_known_fields(
@@ -156,6 +177,142 @@ class RuleBasedGateway:
         fields = dict(existing_fields or {})
         msg_lower = user_message.lower()
 
+        # 0. Route Extraction (route_from, route_to, route_mode)
+        is_route_query = any(w in msg_lower for w in self.ROUTE_KEYWORDS)
+
+        if is_route_query:
+            # Route mode extraction
+            if "route_mode" not in fields:
+                if re.search(r"\b(?:walk|walking|on foot|foot)\b", msg_lower):
+                    fields["route_mode"] = "walking"
+                elif re.search(r"\b(?:bike|biking|cycle|cycling|bicycle)\b", msg_lower):
+                    fields["route_mode"] = "cycling"
+                elif re.search(r"\b(?:drive|driving|car|by car)\b", msg_lower):
+                    fields["route_mode"] = "driving"
+
+            # Pattern A: from <Place1> to <Place2> (with optional in <City>)
+            route_from_to = re.search(
+                r"\bfrom\s+([A-Z][a-zA-Z0-9\s\.\'\-]{1,30}?)\s+to\s+([A-Z][a-zA-Z0-9\s\.\'\-]{1,30}?)(?:\s+in\s+([A-Z][a-zA-Z\s]{2,20})|[,\.\?!]|\s+by\s+|\s+via\s+|$|\s+for\s+)",
+                user_message,
+            )
+            if route_from_to:
+                p1 = route_from_to.group(1).strip()
+                p2 = route_from_to.group(2).strip()
+                in_city = (
+                    route_from_to.group(3).strip() if route_from_to.group(3) else None
+                )
+                if "route_from" not in fields and p1.lower() not in {
+                    "the",
+                    "a",
+                    "an",
+                    "here",
+                }:
+                    fields["route_from"] = p1
+                if "route_to" not in fields and p2.lower() not in {
+                    "the",
+                    "a",
+                    "an",
+                    "there",
+                }:
+                    fields["route_to"] = p2
+                if (
+                    in_city
+                    and "destination" not in fields
+                    and in_city.lower() not in {"the", "a", "an"}
+                ):
+                    fields["destination"] = in_city
+            else:
+                # Pattern B: between <Place1> and <Place2>
+                route_between = re.search(
+                    r"\bbetween\s+([A-Z][a-zA-Z0-9\s\.\'\-]{1,30}?)\s+and\s+([A-Z][a-zA-Z0-9\s\.\'\-]{1,30}?)(?:\s+in\s+([A-Z][a-zA-Z\s]{2,20})|[,\.\?!]|\s+by\s+|\s+via\s+|$|\s+for\s+)",
+                    user_message,
+                )
+                if route_between:
+                    p1 = route_between.group(1).strip()
+                    p2 = route_between.group(2).strip()
+                    in_city = (
+                        route_between.group(3).strip()
+                        if route_between.group(3)
+                        else None
+                    )
+                    if "route_from" not in fields and p1.lower() not in {
+                        "the",
+                        "a",
+                        "an",
+                    }:
+                        fields["route_from"] = p1
+                    if "route_to" not in fields and p2.lower() not in {
+                        "the",
+                        "a",
+                        "an",
+                    }:
+                        fields["route_to"] = p2
+                    if (
+                        in_city
+                        and "destination" not in fields
+                        and in_city.lower() not in {"the", "a", "an"}
+                    ):
+                        fields["destination"] = in_city
+                else:
+                    # Pattern C: to <Place2> from <Place1>
+                    route_to_from = re.search(
+                        r"\bto\s+([A-Z][a-zA-Z0-9\s\.\'\-]{1,30}?)\s+from\s+([A-Z][a-zA-Z0-9\s\.\'\-]{1,30}?)(?:\s+in\s+([A-Z][a-zA-Z\s]{2,20})|[,\.\?!]|\s+by\s+|\s+via\s+|$|\s+for\s+)",
+                        user_message,
+                    )
+                    if route_to_from:
+                        p2 = route_to_from.group(1).strip()
+                        p1 = route_to_from.group(2).strip()
+                        in_city = (
+                            route_to_from.group(3).strip()
+                            if route_to_from.group(3)
+                            else None
+                        )
+                        if "route_to" not in fields and p2.lower() not in {
+                            "the",
+                            "a",
+                            "an",
+                        }:
+                            fields["route_to"] = p2
+                        if "route_from" not in fields and p1.lower() not in {
+                            "the",
+                            "a",
+                            "an",
+                        }:
+                            fields["route_from"] = p1
+                        if (
+                            in_city
+                            and "destination" not in fields
+                            and in_city.lower() not in {"the", "a", "an"}
+                        ):
+                            fields["destination"] = in_city
+
+            # Fallback single endpoint extraction if route query is detected
+            if "route_from" not in fields:
+                from_single = re.search(
+                    r"\bfrom\s+([A-Z][a-zA-Z0-9\s\.\'\-]{1,30}?)(?:\s+in\s+([A-Z][a-zA-Z\s]{2,20})|[,\.\?!]|\s+by\s+|\s+via\s+|$)",
+                    user_message,
+                )
+                if from_single:
+                    candidate = from_single.group(1).strip()
+                    if candidate.lower() not in {"the", "a", "an"}:
+                        fields["route_from"] = candidate
+                        if from_single.group(2) and "destination" not in fields:
+                            fields["destination"] = from_single.group(2).strip()
+            if "route_to" not in fields:
+                to_single = re.search(
+                    r"\bto\s+([A-Z][a-zA-Z0-9\s\.\'\-]{1,30}?)(?:\s+in\s+([A-Z][a-zA-Z\s]{2,20})|[,\.\?!]|\s+by\s+|\s+via\s+|$)",
+                    user_message,
+                )
+                if to_single:
+                    candidate = to_single.group(1).strip()
+                    if (
+                        candidate.lower() not in {"the", "a", "an"}
+                        and candidate.lower() != fields.get("destination", "").lower()
+                    ):
+                        fields["route_to"] = candidate
+                        if to_single.group(2) and "destination" not in fields:
+                            fields["destination"] = to_single.group(2).strip()
+
         # 1. Destination Extraction
         if "destination" not in fields:
             # Pattern: "to <City>", "in <City>", "visit <City>", "explore <City>"
@@ -165,7 +322,11 @@ class RuleBasedGateway:
             )
             if dest_match:
                 candidate = dest_match.group(1).strip()
-                if candidate.lower() not in {"the", "a", "an", "my", "our"}:
+                if (
+                    candidate.lower() not in {"the", "a", "an", "my", "our"}
+                    and candidate.lower() != fields.get("route_from", "").lower()
+                    and candidate.lower() != fields.get("route_to", "").lower()
+                ):
                     fields["destination"] = candidate
             else:
                 for city in self.KNOWN_DESTINATIONS:
@@ -189,7 +350,10 @@ class RuleBasedGateway:
             )
             if origin_match:
                 candidate = origin_match.group(1).strip()
-                if candidate.lower() not in {"the", "a", "an", "home"}:
+                if (
+                    candidate.lower() not in {"the", "a", "an", "home"}
+                    and candidate.lower() != fields.get("route_from", "").lower()
+                ):
                     fields["origin"] = candidate
 
         # 3. Date Extraction (ISO dates YYYY-MM-DD)
@@ -320,15 +484,28 @@ class RuleBasedGateway:
             has_weather_keyword
             and "itinerary" not in msg_lower
             and "plan" not in msg_lower
+            and not any(w in msg_lower for w in self.ROUTE_KEYWORDS)
         ):
             return Intent.WEATHER_PLANNING
 
-        # 3. Destination discovery intent
-        has_itinerary_request = any(
-            w in msg_lower for w in ("itinerary", "plan", "schedule", "trip")
-        )
+        # 3. Route planning intent
+        has_route_keyword = any(w in msg_lower for w in self.ROUTE_KEYWORDS)
+        has_route_fields = bool(fields.get("route_from") or fields.get("route_to"))
         has_dates = bool(fields.get("start_date") and fields.get("end_date"))
+        has_itinerary_request = any(
+            w in msg_lower for w in ("itinerary", "multi-day", "schedule", "trip")
+        )
 
+        if (
+            (has_route_keyword or has_route_fields)
+            and not has_itinerary_request
+            and not has_dates
+        ):
+            return Intent.ROUTE_PLANNING
+        if has_route_keyword and not has_dates and "trip" not in msg_lower:
+            return Intent.ROUTE_PLANNING
+
+        # 4. Destination discovery intent
         if not has_itinerary_request and not has_dates:
             # If user just named a city or said "explore X"
             if any(
@@ -339,7 +516,7 @@ class RuleBasedGateway:
             if fields.get("destination") and len(msg_lower.split()) <= 4:
                 return Intent.DESTINATION_DISCOVERY
 
-        # 4. Default: Itinerary planning
+        # 5. Default: Itinerary planning
         return Intent.ITINERARY_PLANNING
 
     FIELD_EXPLANATIONS: dict[str, tuple[str, str]] = {
@@ -355,6 +532,8 @@ class RuleBasedGateway:
         "start_date": ("departure date", "needed to schedule daily activities"),
         "end_date": ("return date", "needed to determine trip duration"),
         "party_size": ("number of travelers", "needed to tailor group activities"),
+        "route_from": ("starting location", "needed to calculate directions"),
+        "route_to": ("arrival destination", "needed to calculate directions"),
     }
 
     def generate_clarification(

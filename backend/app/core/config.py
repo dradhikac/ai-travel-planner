@@ -6,8 +6,14 @@ from typing import Final, Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Phase 3 Agent Workflow Bounds Constants
-MAX_TOOL_CALLS: Final[int] = 4
+# Phase 4 Agent Workflow Bounds Constants
+# Default raised from 4 to 5 to accommodate multi-tool route planning.
+# Worst-case sequential tool invocations per intent:
+# - DESTINATION_DISCOVERY: 1 (destination geocoding)
+# - WEATHER_PLANNING: 2 (destination geocoding + weather forecast)
+# - ROUTE_PLANNING: 4 (destination geocode + 2 endpoint geocodes + route context)
+# - ITINERARY_PLANNING: 2 default (geocode + weather), up to 5 with route pair
+MAX_TOOL_CALLS: Final[int] = 5
 MAX_REPAIR_ATTEMPTS: Final[int] = 2
 AGENT_RECURSION_LIMIT: Final[int] = 25
 

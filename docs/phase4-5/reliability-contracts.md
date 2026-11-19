@@ -688,3 +688,50 @@ Phase 4 introduces an optional LLM-backed repair gateway designed for intelligen
   - `Timeout` / `NetworkError` -> `ErrorCode.TIMEOUT` (`retryable: True`). Retried via `call_with_retry_sync` / `retry_with_backoff` with tight bounds (max 1 retry).
   - On retry exhaustion or non-retryable failure, safely falls back to deterministic repair.
 
+---
+
+## 12. Multi-Tool Routing Workflow & Graceful Degradation
+
+Phase 4 Task 11 integrates the third tool (`get_route_context`) into the agent LangGraph workflow under explicit intent routing and multi-tool reliability contracts.
+
+### 12.1 Intent Classification (`route_planning`) & Field Extraction
+- **Intent**: `Intent.ROUTE_PLANNING = "route_planning"` is classified when the user asks about travel directions, distance, or routes between two locations within a destination.
+- **Keywords**: Triggered by navigation terms (`route`, `directions`, `how to get`, `walk from`, `drive from`, `bike from`, `distance between`, `how far`).
+- **Isolation from Trip Origin**: When extracting route endpoints, `route_from` is strictly isolated from the user's home departure `origin` to prevent confusing point-to-point transit inquiries with multi-day flight/trip departures.
+
+### 12.2 Required Fields & Targeted Clarification
+- **Required Inputs**: `destination`, `route_from` (starting location), and `route_to` (arrival destination).
+- **Targeted Single Clarification**: If any required field is missing, the agent emits exactly ONE clarification question listing every missing parameter with its functional reason:
+  - `route_from`: "starting location (needed to calculate directions)"
+  - `route_to`: "arrival destination (needed to calculate directions)"
+  - `destination`: "destination city (needed to research attractions and weather)"
+- **Contradiction Guard**: If `route_from` equals `route_to` (case-insensitive), clarification is requested without planning or invoking tools.
+- **Default Modality**: Defaults to `"walking"`, announced transparently in response warnings.
+
+### 12.3 Sequential Planning Order & Dependency Chain
+Tool scheduling strictly respects operational dependencies:
+1. **Destination Geocoding**: Resolves destination city (`geocode_destination`).
+2. **Endpoint Geocoding**: Resolves starting point and arrival point biased to destination (`f"{route_from}, {destination}"` and `f"{route_to}, {destination}"`).
+3. **Route Context**: Invokes `get_route_context` with resolved coordinate pairs and requested modality.
+4. **No Weather for Pure Route Queries**: Meteorological forecasts are NOT called for route inquiries. For `itinerary_planning`, route tools are scheduled only when a place pair is explicitly provided.
+
+### 12.4 Bounds & Worst-Case Invocations (`MAX_TOOL_CALLS = 5`)
+To safely accommodate multi-tool route workflows without recursion loops, `MAX_TOOL_CALLS` is bounded at 5:
+- `DESTINATION_DISCOVERY`: 1 call (destination geocoding)
+- `WEATHER_PLANNING`: 2 calls (destination geocoding + weather forecast)
+- `ROUTE_PLANNING`: 4 calls (destination geocode + 2 endpoint geocodes + route context)
+- `ITINERARY_PLANNING`: 2 calls default (geocode + weather), up to 5 calls when an optional route pair is supplied
+
+### 12.5 Fault Isolation & Graceful Degradation Policies
+- **Endpoint Failure**: If destination geocoding fails or returns empty, dependent endpoint geocodes and route calculations are skipped (`ToolStatus.SKIPPED`), resulting in terminal `RunStatus.FAILED`.
+- **Route Failure / Timeout**: If endpoint geocoding succeeds but the route provider times out (`ToolStatus.TIMEOUT`) or errors, the workflow degrades safely to `RunStatus.PARTIAL`, preserving geocoded locations and attaching an honest diagnostic note.
+- **Non-Retryable Authentication Errors**: Upstream provider 401/403 errors fail immediately on attempt 1 without retries, preserving locations and degrading to `RunStatus.PARTIAL`.
+
+### 12.6 Unavailable Tools Contract
+- **Pre-Execution Check**: In live mode without an API key (`ROUTING_PROVIDER_MODE="live"` with `OPENROUTESERVICE_API_KEY=None`) or when routing is disabled, the route tool is **never planned for execution**.
+- **Audit Recording**: Recorded as `ToolStatus.SKIPPED` with `safe_message="Routing capability is unavailable (missing API key or disabled)."`.
+- **User Presentation**: The response transparently notes capability unavailability rather than reporting an internal provider failure.
+
+### 12.7 Tool Activity Audit Attribution
+- **Audit Mapping**: `tool_activity` audits all route executions with canonical human label `"Route Context"`, external provider attribution (`OpenRouteService`), UTC timestamps, and explicit Live/Mock indicators.
+

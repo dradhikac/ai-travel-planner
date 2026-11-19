@@ -26,6 +26,7 @@ class Intent(StrEnum):
 
     DESTINATION_DISCOVERY = "destination_discovery"
     WEATHER_PLANNING = "weather_planning"
+    ROUTE_PLANNING = "route_planning"
     ITINERARY_PLANNING = "itinerary_planning"
     UNSUPPORTED = "unsupported"
 

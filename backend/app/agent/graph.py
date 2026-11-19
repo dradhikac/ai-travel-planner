@@ -75,7 +75,7 @@ def create_agent_graph(
         return ask_clarification(state, gateway=active_gateway)
 
     def _node_plan(state: TripState) -> dict[str, Any]:
-        return plan_tool_calls(state)
+        return plan_tool_calls(state, tools=active_tools)
 
     def _node_execute(state: TripState) -> dict[str, Any]:
         return execute_tools(state, tools=active_tools, max_tool_calls=max_tool_calls)
@@ -118,7 +118,7 @@ def create_agent_graph(
         """Route to draft_itinerary for planning, or respond for discovery/failure."""
         if state.step_count >= max_steps:
             return "respond"
-        if state.intent == Intent.DESTINATION_DISCOVERY:
+        if state.intent in (Intent.DESTINATION_DISCOVERY, Intent.ROUTE_PLANNING):
             return "respond"
         geo_res = next(
             (r for r in state.tool_results if r.tool_name == "geocode_destination"),
