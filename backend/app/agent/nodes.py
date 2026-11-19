@@ -25,7 +25,7 @@ from app.agent.validation import (
 from app.agent.validation import (
     validate_itinerary as run_itinerary_validation,
 )
-from app.core.config import MAX_TOOL_CALLS
+from app.core.config import MAX_TOOL_CALLS, Settings, get_settings
 from app.schemas.itinerary_v2 import parse_itinerary_payload
 from app.schemas.provider import GeocodeResult, WeatherSummary
 from app.schemas.trip import ToolActivity, TripRequest, TripResponse
@@ -66,9 +66,15 @@ def build_tool_activity(
         elif res.tool_name == "get_weather":
             label = "Weather Forecast"
             explanation = "Retrieved daily meteorological forecast for trip dates."
+        elif res.tool_name == "get_route_context":
+            label = "Route Context"
+            explanation = "Calculated travel distance and estimated transit time."
         else:
             label = res.tool_name.replace("_", " ").title()
             explanation = f"Executed {label} for travel planning."
+
+        if res.status == ToolStatus.SKIPPED and res.safe_message:
+            explanation = res.safe_message
 
         source_name = "Internal"
         if res.source:
@@ -80,6 +86,8 @@ def build_tool_activity(
                 source_name = provider
         elif "geocode" in res.tool_name or "weather" in res.tool_name:
             source_name = "Open-Meteo"
+        elif "route" in res.tool_name:
+            source_name = "OpenRouteService"
 
         status_val = res.status.value
         data_origin = (
@@ -108,6 +116,17 @@ def build_tool_activity(
                         "Weather forecast skipped: geocoding did not resolve "
                         "a usable location."
                     )
+                    source_name = "Open-Meteo"
+                elif call.tool_name == "get_route_context":
+                    label = "Route Context"
+                    explanation = (
+                        "Route calculation skipped: location coordinates "
+                        "could not be resolved."
+                    )
+                    source_name = "OpenRouteService"
+                elif call.tool_name == "geocode_destination":
+                    label = "Destination Geocoding"
+                    explanation = "Geocoding was scheduled but skipped."
                     source_name = "Open-Meteo"
                 else:
                     label = call.tool_name.replace("_", " ").title()
@@ -223,6 +242,48 @@ def check_required_fields(state: TripState) -> dict[str, Any]:
                 contradictions.append(
                     "Travel dates must be valid ISO dates (YYYY-MM-DD)"
                 )
+
+    elif intent == Intent.ROUTE_PLANNING:
+        if not fields.get("destination") or not str(fields["destination"]).strip():
+            missing.append("destination")
+        if not fields.get("route_from") or not str(fields["route_from"]).strip():
+            missing.append("route_from")
+        if not fields.get("route_to") or not str(fields["route_to"]).strip():
+            missing.append("route_to")
+
+        # Contradiction: starting location equals arrival destination
+        if fields.get("route_from") and fields.get("route_to"):
+            from_str = str(fields["route_from"]).strip()
+            to_str = str(fields["route_to"]).strip()
+            if from_str.casefold() == to_str.casefold():
+                contradictions.append(
+                    "Starting location and arrival destination cannot be identical"
+                )
+
+        # Mode normalization and default announcement
+        if not fields.get("route_mode") or str(fields["route_mode"]).strip() == "":
+            fields["route_mode"] = "walking"
+            mode_msg = (
+                "Transit mode was not specified; defaulted to walking directions."
+            )
+            if mode_msg not in warnings:
+                warnings.append(mode_msg)
+        else:
+            mode_raw = str(fields["route_mode"]).strip().lower()
+            if mode_raw in ("walk", "walking", "foot"):
+                fields["route_mode"] = "walking"
+            elif mode_raw in ("bike", "biking", "cycle", "cycling", "bicycle"):
+                fields["route_mode"] = "cycling"
+            elif mode_raw in ("drive", "driving", "car"):
+                fields["route_mode"] = "driving"
+            else:
+                fields["route_mode"] = "walking"
+                mode_fallback_msg = (
+                    f"Transit mode '{mode_raw}' is not supported; "
+                    "defaulted to walking directions."
+                )
+                if mode_fallback_msg not in warnings:
+                    warnings.append(mode_fallback_msg)
 
     elif intent == Intent.ITINERARY_PLANNING:
         # Check essential fields: origin, destination, dates, party_size
@@ -410,9 +471,28 @@ def ask_clarification(
 # ==============================================================================
 
 
-def plan_tool_calls(state: TripState) -> dict[str, Any]:
+def is_route_tool_available(
+    settings: Settings | None = None,
+    tools: dict[str, Any] | None = None,
+) -> bool:
+    """Check whether routing capability is available and configured."""
+    s = settings or get_settings()
+    if tools is not None and "get_route_context" not in tools:
+        return False
+    if s.ROUTING_PROVIDER_MODE == "live" and not s.OPENROUTESERVICE_API_KEY:
+        return False
+    return True
+
+
+def plan_tool_calls(
+    state: TripState,
+    settings: Settings | None = None,
+    tools: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Select and schedule tool invocations based strictly on classified intent."""
     planned: list[ToolCall] = []
+    tool_results: list[ToolResult] = list(state.tool_results)
+    warnings: list[str] = list(state.warnings)
     fields = state.known_fields
     destination = fields.get("destination", "")
 
@@ -426,8 +506,8 @@ def plan_tool_calls(state: TripState) -> dict[str, Any]:
                 )
             )
 
-    # 2. Weather & Itinerary planning: geocode then weather
-    elif state.intent in (Intent.WEATHER_PLANNING, Intent.ITINERARY_PLANNING):
+    # 2. Weather planning intent: geocode then weather
+    elif state.intent == Intent.WEATHER_PLANNING:
         if destination:
             planned.append(
                 ToolCall(
@@ -449,13 +529,146 @@ def plan_tool_calls(state: TripState) -> dict[str, Any]:
                     )
                 )
 
-    # 3. Unsupported intent: zero tools
+    # 3. Route planning intent: geocode destination, geocode endpoints, route
+    elif state.intent == Intent.ROUTE_PLANNING:
+        route_from = fields.get("route_from", "")
+        route_to = fields.get("route_to", "")
+        mode = fields.get("route_mode", "walking")
+
+        if destination:
+            # 1. Geocode destination
+            planned.append(
+                ToolCall(
+                    tool_name="geocode_destination",
+                    arguments={"query": destination},
+                )
+            )
+            # 2. Geocode starting point biased to destination
+            if route_from:
+                planned.append(
+                    ToolCall(
+                        tool_name="geocode_destination",
+                        arguments={"query": f"{route_from}, {destination}"},
+                    )
+                )
+            # 3. Geocode arrival point biased to destination
+            if route_to:
+                planned.append(
+                    ToolCall(
+                        tool_name="geocode_destination",
+                        arguments={"query": f"{route_to}, {destination}"},
+                    )
+                )
+
+            # 4. Route context (if available)
+            if is_route_tool_available(settings=settings, tools=tools):
+                planned.append(
+                    ToolCall(
+                        tool_name="get_route_context",
+                        arguments={
+                            "origin_lat": 0.0,
+                            "origin_lon": 0.0,
+                            "dest_lat": 0.0,
+                            "dest_lon": 0.0,
+                            "mode": mode,
+                        },
+                    )
+                )
+            else:
+                # Unavailable tool: never planned; recorded as skipped: unavailable
+                tool_results.append(
+                    ToolResult(
+                        tool_name="get_route_context",
+                        status=ToolStatus.SKIPPED,
+                        safe_message=(
+                            "Routing capability is unavailable "
+                            "(missing API key or disabled)."
+                        ),
+                        data_origin="none",
+                    )
+                )
+                unavailable_msg = "Routing capability is currently unavailable."
+                if unavailable_msg not in warnings:
+                    warnings.append(unavailable_msg)
+
+    # 4. Itinerary planning: geocode, weather, and optional route pair
+    elif state.intent == Intent.ITINERARY_PLANNING:
+        if destination:
+            planned.append(
+                ToolCall(
+                    tool_name="geocode_destination",
+                    arguments={"query": destination},
+                )
+            )
+            # Weather call scheduled; coordinates populated after geocode in execution
+            if fields.get("start_date") and fields.get("end_date"):
+                planned.append(
+                    ToolCall(
+                        tool_name="get_weather",
+                        arguments={
+                            "latitude": 0.0,
+                            "longitude": 0.0,
+                            "start_date": fields["start_date"],
+                            "end_date": fields["end_date"],
+                        },
+                    )
+                )
+
+            # Route only if place pair is supplied
+            route_from = fields.get("route_from")
+            route_to = fields.get("route_to")
+            if route_from and route_to:
+                mode = fields.get("route_mode", "walking")
+                planned.append(
+                    ToolCall(
+                        tool_name="geocode_destination",
+                        arguments={"query": f"{route_from}, {destination}"},
+                    )
+                )
+                planned.append(
+                    ToolCall(
+                        tool_name="geocode_destination",
+                        arguments={"query": f"{route_to}, {destination}"},
+                    )
+                )
+                if is_route_tool_available(settings=settings, tools=tools):
+                    planned.append(
+                        ToolCall(
+                            tool_name="get_route_context",
+                            arguments={
+                                "origin_lat": 0.0,
+                                "origin_lon": 0.0,
+                                "dest_lat": 0.0,
+                                "dest_lon": 0.0,
+                                "mode": mode,
+                            },
+                        )
+                    )
+                else:
+                    tool_results.append(
+                        ToolResult(
+                            tool_name="get_route_context",
+                            status=ToolStatus.SKIPPED,
+                            safe_message=(
+                                "Routing capability is unavailable "
+                                "(missing API key or disabled)."
+                            ),
+                            data_origin="none",
+                        )
+                    )
+                    unavailable_msg = "Routing capability is currently unavailable."
+                    if unavailable_msg not in warnings:
+                        warnings.append(unavailable_msg)
+
+    # 5. Unsupported intent: zero tools
     elif state.intent == Intent.UNSUPPORTED:
         planned = []
 
     return {
         "step_count": state.step_count + 1,
         "planned_tool_calls": planned,
+        "tool_results": tool_results,
+        "warnings": warnings,
     }
 
 
@@ -471,14 +684,21 @@ def execute_tools(
 ) -> dict[str, Any]:
     """Execute planned tools sequentially up to MAX_TOOL_CALLS without looping.
 
-    Stops planning weather if geocoding did not return a usable location.
+    Stops planning weather or routes if geocoding did not return a usable location.
     """
     active_tools = tools if tools is not None else TOOL_REGISTRY
     results: list[ToolResult] = list(state.tool_results)
     warnings: list[str] = list(state.warnings)
 
-    last_geocode_res: ToolResult | None = None
+    dest_geo_res: ToolResult | None = None
+    from_geo_res: ToolResult | None = None
+    to_geo_res: ToolResult | None = None
     executed_count = 0
+
+    fields = state.known_fields
+    route_from = fields.get("route_from", "")
+    route_to = fields.get("route_to", "")
+    destination = fields.get("destination", "")
 
     for call in state.planned_tool_calls:
         if executed_count >= max_tool_calls:
@@ -487,12 +707,29 @@ def execute_tools(
             )
             break
 
+        # Check if geocoding of endpoint should be skipped because destination failed
+        if call.tool_name == "geocode_destination":
+            query_val = str(call.arguments.get("query", ""))
+            is_endpoint = (route_from and route_from in query_val) or (
+                route_to and route_to in query_val
+            )
+            if (
+                is_endpoint
+                and dest_geo_res is not None
+                and (dest_geo_res.status != ToolStatus.OK or not dest_geo_res.data)
+            ):
+                warnings.append(
+                    "Place geocoding skipped: destination location "
+                    "could not be resolved."
+                )
+                continue
+
         # Dependency check: weather tool requires valid geocoded coordinates
         if call.tool_name == "get_weather":
             if (
-                last_geocode_res is None
-                or last_geocode_res.status != ToolStatus.OK
-                or not last_geocode_res.data
+                dest_geo_res is None
+                or dest_geo_res.status != ToolStatus.OK
+                or not dest_geo_res.data
             ):
                 # Geocoding failed or returned empty; stop planning/executing weather
                 warnings.append(
@@ -502,7 +739,7 @@ def execute_tools(
                 continue
 
             # Populate resolved coordinates from first candidate location
-            candidates = last_geocode_res.data
+            candidates = dest_geo_res.data
             first_candidate = (
                 candidates[0] if isinstance(candidates, list) else candidates
             )
@@ -513,6 +750,84 @@ def execute_tools(
                 results.append(
                     ToolResult(
                         tool_name="get_weather",
+                        status=ToolStatus.ERROR,
+                        error_code=ToolErrorCode.MALFORMED_RESPONSE,
+                        safe_message="Geocoding response missing coordinates.",
+                        data_origin="none",
+                    )
+                )
+                executed_count += 1
+                continue
+
+        # Dependency check: route tool requires coordinates for both endpoints
+        if call.tool_name == "get_route_context":
+            if (
+                from_geo_res is None
+                or from_geo_res.status != ToolStatus.OK
+                or not from_geo_res.data
+            ):
+                results.append(
+                    ToolResult(
+                        tool_name="get_route_context",
+                        status=ToolStatus.SKIPPED,
+                        error_code=None,
+                        safe_message=(
+                            "Route calculation skipped: location coordinates "
+                            "could not be resolved."
+                        ),
+                        data_origin="none",
+                    )
+                )
+                warnings.append(
+                    "Route calculation skipped: starting location coordinates "
+                    "could not be resolved."
+                )
+                executed_count += 1
+                continue
+
+            if (
+                to_geo_res is None
+                or to_geo_res.status != ToolStatus.OK
+                or not to_geo_res.data
+            ):
+                results.append(
+                    ToolResult(
+                        tool_name="get_route_context",
+                        status=ToolStatus.SKIPPED,
+                        error_code=None,
+                        safe_message=(
+                            "Route calculation skipped: location coordinates "
+                            "could not be resolved."
+                        ),
+                        data_origin="none",
+                    )
+                )
+                warnings.append(
+                    "Route calculation skipped: arrival destination coordinates "
+                    "could not be resolved."
+                )
+                executed_count += 1
+                continue
+
+            from_cand = (
+                from_geo_res.data[0]
+                if isinstance(from_geo_res.data, list)
+                else from_geo_res.data
+            )
+            to_cand = (
+                to_geo_res.data[0]
+                if isinstance(to_geo_res.data, list)
+                else to_geo_res.data
+            )
+            try:
+                call.arguments["origin_lat"] = float(from_cand["latitude"])
+                call.arguments["origin_lon"] = float(from_cand["longitude"])
+                call.arguments["dest_lat"] = float(to_cand["latitude"])
+                call.arguments["dest_lon"] = float(to_cand["longitude"])
+            except (KeyError, TypeError, ValueError):
+                results.append(
+                    ToolResult(
+                        tool_name="get_route_context",
                         status=ToolStatus.ERROR,
                         error_code=ToolErrorCode.MALFORMED_RESPONSE,
                         safe_message="Geocoding response missing coordinates.",
@@ -546,18 +861,33 @@ def execute_tools(
                 raise TypeError(f"Tool '{call.tool_name}' is not callable.")
 
             if isinstance(res, ToolResult):
-                results.append(res)
-                if call.tool_name == "geocode_destination":
-                    last_geocode_res = res
+                recorded_res = res
             else:
-                results.append(
-                    ToolResult(
-                        tool_name=call.tool_name,
-                        status=ToolStatus.OK,
-                        data=res if isinstance(res, (dict, list)) else {"result": res},
-                        data_origin="none",
-                    )
+                recorded_res = ToolResult(
+                    tool_name=call.tool_name,
+                    status=ToolStatus.OK,
+                    data=res if isinstance(res, (dict, list)) else {"result": res},
+                    data_origin="none",
                 )
+            results.append(recorded_res)
+
+            if call.tool_name == "geocode_destination":
+                query_val = str(call.arguments.get("query", ""))
+                if dest_geo_res is None and (
+                    query_val == destination or (not route_from and not route_to)
+                ):
+                    dest_geo_res = recorded_res
+                elif from_geo_res is None and route_from and route_from in query_val:
+                    from_geo_res = recorded_res
+                elif to_geo_res is None and route_to and route_to in query_val:
+                    to_geo_res = recorded_res
+                elif dest_geo_res is None:
+                    dest_geo_res = recorded_res
+                elif from_geo_res is None:
+                    from_geo_res = recorded_res
+                else:
+                    to_geo_res = recorded_res
+
         except Exception as err:
             results.append(
                 ToolResult(
@@ -951,6 +1281,91 @@ def respond(
                 "tool_activity": activity_entries,
             }
 
+    # 4b. Route Planning Outcome (when destination geocoding was ok)
+    if state.intent == Intent.ROUTE_PLANNING:
+        route_res = next(
+            (r for r in state.tool_results if r.tool_name == "get_route_context"),
+            None,
+        )
+        failed_endpoints = [
+            r
+            for r in state.tool_results
+            if r.tool_name == "geocode_destination"
+            and r != geo_res
+            and (r.status != ToolStatus.OK or not r.data)
+        ]
+
+        if route_res is None or route_res.status != ToolStatus.OK or failed_endpoints:
+            if route_res and route_res.status == ToolStatus.TIMEOUT:
+                msg = "Route calculation timed out. Geocoded locations preserved."
+            elif route_res and route_res.status == ToolStatus.SKIPPED:
+                if "unavailable" in (route_res.safe_message or "").lower():
+                    msg = (
+                        "Routing capability is unavailable "
+                        "(missing API key or disabled). Geocoded locations preserved."
+                    )
+                else:
+                    msg = (
+                        "Route calculation skipped: location coordinates "
+                        "could not be resolved."
+                    )
+            elif route_res and (
+                "auth" in str(route_res.error_code).lower()
+                or (
+                    route_res.safe_message
+                    and (
+                        "authentication" in route_res.safe_message.lower()
+                        or "api key" in route_res.safe_message.lower()
+                    )
+                )
+            ):
+                msg = (
+                    "Route calculation failed due to provider authentication error. "
+                    "Geocoded locations preserved."
+                )
+            elif route_res and route_res.status == ToolStatus.EMPTY:
+                msg = (
+                    "No routable path found between locations. "
+                    "Geocoded locations preserved."
+                )
+            else:
+                msg = (
+                    "Route calculation encountered an error. "
+                    "Geocoded locations preserved."
+                )
+
+            if msg not in warnings:
+                warnings.append(msg)
+
+            return {
+                "step_count": state.step_count + 1,
+                "status": RunStatus.PARTIAL,
+                "final_response": None,
+                "warnings": warnings,
+                "tool_activity": activity_entries,
+            }
+
+        # Route tool succeeded
+        if route_res.data and isinstance(route_res.data, dict):
+            dist = route_res.data.get("distance_km")
+            dur = route_res.data.get("duration_minutes")
+            mode = route_res.data.get("mode", "walking")
+            if dist is not None and dur is not None:
+                summary_msg = (
+                    f"Retrieved {mode} route: {float(dist):.1f} km, "
+                    f"~{float(dur):.0f} mins."
+                )
+                if summary_msg not in warnings:
+                    warnings.append(summary_msg)
+
+        return {
+            "step_count": state.step_count + 1,
+            "status": RunStatus.COMPLETED,
+            "final_response": None,
+            "warnings": warnings,
+            "tool_activity": activity_entries,
+        }
+
     # Check weather outcome (when geocoding was ok)
     weather_res = next(
         (r for r in state.tool_results if r.tool_name == "get_weather"),
@@ -1018,13 +1433,24 @@ def respond(
         )
         has_crit = has_critical(current_issues)
 
+        route_res = next(
+            (r for r in state.tool_results if r.tool_name == "get_route_context"),
+            None,
+        )
+        route_failed = route_res is not None and route_res.status != ToolStatus.OK
+
         if has_crit:
             final_status = (
                 RunStatus.FAILED
                 if state.status == RunStatus.FAILED
                 else RunStatus.PARTIAL
             )
-        elif weather_failed or state.is_partial or state.status == RunStatus.PARTIAL:
+        elif (
+            route_failed
+            or weather_failed
+            or state.is_partial
+            or state.status == RunStatus.PARTIAL
+        ):
             final_status = RunStatus.PARTIAL
         elif state.status == RunStatus.FAILED:
             final_status = RunStatus.FAILED
