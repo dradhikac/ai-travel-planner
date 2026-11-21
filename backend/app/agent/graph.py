@@ -8,6 +8,7 @@ Implements the Phase 3 LangGraph state machine:
 - run_workflow entry point accepting injectable dependencies for testing.
 """
 
+import time
 from typing import Any
 
 from langgraph.errors import GraphRecursionError
@@ -39,6 +40,13 @@ from app.core.config import (
     MAX_REPAIR_ATTEMPTS,
     MAX_TOOL_CALLS,
     get_settings,
+)
+from app.core.logging import (
+    emit_event,
+    reset_current_node,
+    reset_request_id,
+    set_current_node,
+    set_request_id,
 )
 
 
@@ -164,18 +172,63 @@ def create_agent_graph(
 
         return "repair_itinerary"
 
+    # Helper to wrap graph nodes with structured event tracing
+    def _wrap_node(node_name: str, node_fn: Any) -> Any:
+        def _wrapped(state: TripState) -> dict[str, Any]:
+            token_node = set_current_node(node_name)
+            emit_event("node_started", node=node_name)
+            t0 = time.perf_counter()
+            try:
+                result = node_fn(state)
+                latency_ms = max(0.0, round((time.perf_counter() - t0) * 1000.0, 2))
+                res_status = "ok"
+                if isinstance(result, dict) and "status" in result and result["status"]:
+                    s = result["status"]
+                    res_status = s.value if hasattr(s, "value") else str(s)
+                emit_event(
+                    "node_finished",
+                    node=node_name,
+                    latency_ms=latency_ms,
+                    status=res_status,
+                )
+                return result
+            except Exception as exc:
+                latency_ms = max(0.0, round((time.perf_counter() - t0) * 1000.0, 2))
+                emit_event(
+                    "node_finished",
+                    node=node_name,
+                    latency_ms=latency_ms,
+                    status="failed",
+                    error_code=exc.__class__.__name__,
+                )
+                raise
+            finally:
+                reset_current_node(token_node)
+
+        return _wrapped
+
     # 3. Assemble graph nodes
     builder = StateGraph(TripState)
-    builder.add_node("parse_request", _node_parse)
-    builder.add_node("check_required_fields", _node_check_fields)
-    builder.add_node("ask_clarification", _node_clarify)
-    builder.add_node("plan_tool_calls", _node_plan)
-    builder.add_node("execute_tools", _node_execute)
-    builder.add_node("draft_itinerary", _node_draft)
-    builder.add_node("validate_itinerary", _node_validate)
-    builder.add_node("repair_itinerary", _node_repair)
-    builder.add_node("build_partial_result", _node_partial)
-    builder.add_node("respond", _node_respond)
+    builder.add_node("parse_request", _wrap_node("parse_request", _node_parse))
+    builder.add_node(
+        "check_required_fields",
+        _wrap_node("check_required_fields", _node_check_fields),
+    )
+    builder.add_node(
+        "ask_clarification", _wrap_node("ask_clarification", _node_clarify)
+    )
+    builder.add_node("plan_tool_calls", _wrap_node("plan_tool_calls", _node_plan))
+    builder.add_node("execute_tools", _wrap_node("execute_tools", _node_execute))
+    builder.add_node("draft_itinerary", _wrap_node("draft_itinerary", _node_draft))
+    builder.add_node(
+        "validate_itinerary", _wrap_node("validate_itinerary", _node_validate)
+    )
+    builder.add_node("repair_itinerary", _wrap_node("repair_itinerary", _node_repair))
+    builder.add_node(
+        "build_partial_result",
+        _wrap_node("build_partial_result", _node_partial),
+    )
+    builder.add_node("respond", _wrap_node("respond", _node_respond))
 
     # 4. Wire edges and conditional routing
     builder.add_edge(START, "parse_request")
@@ -310,18 +363,23 @@ def run_workflow(
         max_repair_attempts=active_max_repair_attempts,
     )
 
+    t_start = time.perf_counter()
+    token_req = set_request_id(state_obj.request_id)
+    final_state: TripState | None = None
     try:
         raw_output = compiled.invoke(
             state_obj,
             config={"recursion_limit": active_recursion_limit},
         )
         if isinstance(raw_output, TripState):
-            return raw_output
-        return TripState.model_validate(raw_output)
+            final_state = raw_output
+        else:
+            final_state = TripState.model_validate(raw_output)
+        return final_state
 
     except GraphRecursionError:
-        # Step/recursion limit triggered: return failed state with clear diagnostic note
-        return TripState(
+        # Step/recursion limit triggered: return failed state with diagnostic note
+        final_state = TripState(
             request_id=state_obj.request_id,
             user_message=state_obj.user_message,
             known_fields=state_obj.known_fields,
@@ -334,3 +392,54 @@ def run_workflow(
                 f"({active_recursion_limit})."
             ],
         )
+        return final_state
+
+    finally:
+        total_latency_ms = max(0.0, round((time.perf_counter() - t_start) * 1000.0, 2))
+        if final_state is not None:
+            tool_counts = {
+                "total": len(final_state.tool_results),
+                "ok": sum(
+                    1 for r in final_state.tool_results if r.status == ToolStatus.OK
+                ),
+                "failed": sum(
+                    1
+                    for r in final_state.tool_results
+                    if r.status
+                    in (
+                        ToolStatus.ERROR,
+                        ToolStatus.TIMEOUT,
+                        ToolStatus.RATE_LIMITED,
+                    )
+                ),
+                "skipped": sum(
+                    1
+                    for r in final_state.tool_results
+                    if r.status == ToolStatus.SKIPPED
+                ),
+                "empty": sum(
+                    1 for r in final_state.tool_results if r.status == ToolStatus.EMPTY
+                ),
+            }
+            emit_event(
+                "workflow_finished",
+                status=final_state.status.value,
+                repair_attempts=final_state.repair_attempts,
+                tool_counts=tool_counts,
+                latency_ms=total_latency_ms,
+            )
+        else:
+            emit_event(
+                "workflow_finished",
+                status="failed",
+                repair_attempts=0,
+                tool_counts={
+                    "total": 0,
+                    "ok": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                    "empty": 0,
+                },
+                latency_ms=total_latency_ms,
+            )
+        reset_request_id(token_req)

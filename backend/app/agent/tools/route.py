@@ -15,6 +15,7 @@ from app.agent.tools.contracts import (
     ToolStatus,
     provider_error_to_tool_result,
 )
+from app.core.logging import emit_tool_call_finished, is_in_execute_tools
 from app.providers.errors import ProviderError
 from app.providers.openrouteservice import OpenRouteServiceClient, RouteNotFoundError
 
@@ -34,12 +35,12 @@ def _run_coroutine_sync(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
-async def async_get_route_context(
+async def _async_get_route_context_impl(
     args: RouteArgs | dict[str, Any] | None = None,
     client: Any | None = None,
     **kwargs: Any,
 ) -> ToolResult:
-    """Asynchronously retrieve route context via OpenRouteService adapter.
+    """Internal implementation to retrieve route context via OpenRouteService adapter.
 
     Calculates travel distance (km) and estimated transit duration (minutes)
     between two coordinates for walking, cycling, or driving.
@@ -163,6 +164,18 @@ async def async_get_route_context(
             latency_ms=elapsed_ms,
             attempts=1,
         )
+
+
+async def async_get_route_context(
+    args: RouteArgs | dict[str, Any] | None = None,
+    client: Any | None = None,
+    **kwargs: Any,
+) -> ToolResult:
+    """Asynchronously retrieve route context via OpenRouteService adapter."""
+    res = await _async_get_route_context_impl(args=args, client=client, **kwargs)
+    if not is_in_execute_tools():
+        emit_tool_call_finished(res)
+    return res
 
 
 def get_route_context(

@@ -5,6 +5,7 @@ state mutations to be applied by LangGraph. Nodes enforce strict execution bound
 step guards, provenance attribution, safe clarification handling, and failure policies.
 """
 
+import time
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -26,6 +27,14 @@ from app.agent.validation import (
     validate_itinerary as run_itinerary_validation,
 )
 from app.core.config import MAX_TOOL_CALLS, Settings, get_settings
+from app.core.logging import (
+    emit_event,
+    emit_tool_call_finished,
+    reset_current_tool,
+    reset_in_execute_tools,
+    set_current_tool,
+    set_in_execute_tools,
+)
 from app.schemas.itinerary_v2 import parse_itinerary_payload
 from app.schemas.provider import GeocodeResult, WeatherSummary
 from app.schemas.trip import ToolActivity, TripRequest, TripResponse
@@ -576,17 +585,17 @@ def plan_tool_calls(
                 )
             else:
                 # Unavailable tool: never planned; recorded as skipped: unavailable
-                tool_results.append(
-                    ToolResult(
-                        tool_name="get_route_context",
-                        status=ToolStatus.SKIPPED,
-                        safe_message=(
-                            "Routing capability is unavailable "
-                            "(missing API key or disabled)."
-                        ),
-                        data_origin="none",
-                    )
+                skipped_res = ToolResult(
+                    tool_name="get_route_context",
+                    status=ToolStatus.SKIPPED,
+                    safe_message=(
+                        "Routing capability is unavailable "
+                        "(missing API key or disabled)."
+                    ),
+                    data_origin="none",
                 )
+                tool_results.append(skipped_res)
+                emit_tool_call_finished(skipped_res, node="plan_tool_calls")
                 unavailable_msg = "Routing capability is currently unavailable."
                 if unavailable_msg not in warnings:
                     warnings.append(unavailable_msg)
@@ -645,17 +654,17 @@ def plan_tool_calls(
                         )
                     )
                 else:
-                    tool_results.append(
-                        ToolResult(
-                            tool_name="get_route_context",
-                            status=ToolStatus.SKIPPED,
-                            safe_message=(
-                                "Routing capability is unavailable "
-                                "(missing API key or disabled)."
-                            ),
-                            data_origin="none",
-                        )
+                    skipped_res = ToolResult(
+                        tool_name="get_route_context",
+                        status=ToolStatus.SKIPPED,
+                        safe_message=(
+                            "Routing capability is unavailable "
+                            "(missing API key or disabled)."
+                        ),
+                        data_origin="none",
                     )
+                    tool_results.append(skipped_res)
+                    emit_tool_call_finished(skipped_res, node="plan_tool_calls")
                     unavailable_msg = "Routing capability is currently unavailable."
                     if unavailable_msg not in warnings:
                         warnings.append(unavailable_msg)
@@ -747,15 +756,15 @@ def execute_tools(
                 call.arguments["latitude"] = float(first_candidate["latitude"])
                 call.arguments["longitude"] = float(first_candidate["longitude"])
             except (KeyError, TypeError, ValueError):
-                results.append(
-                    ToolResult(
-                        tool_name="get_weather",
-                        status=ToolStatus.ERROR,
-                        error_code=ToolErrorCode.MALFORMED_RESPONSE,
-                        safe_message="Geocoding response missing coordinates.",
-                        data_origin="none",
-                    )
+                err_res = ToolResult(
+                    tool_name="get_weather",
+                    status=ToolStatus.ERROR,
+                    error_code=ToolErrorCode.MALFORMED_RESPONSE,
+                    safe_message="Geocoding response missing coordinates.",
+                    data_origin="none",
                 )
+                results.append(err_res)
+                emit_tool_call_finished(err_res, node="execute_tools")
                 executed_count += 1
                 continue
 
@@ -766,18 +775,18 @@ def execute_tools(
                 or from_geo_res.status != ToolStatus.OK
                 or not from_geo_res.data
             ):
-                results.append(
-                    ToolResult(
-                        tool_name="get_route_context",
-                        status=ToolStatus.SKIPPED,
-                        error_code=None,
-                        safe_message=(
-                            "Route calculation skipped: location coordinates "
-                            "could not be resolved."
-                        ),
-                        data_origin="none",
-                    )
+                skipped_res = ToolResult(
+                    tool_name="get_route_context",
+                    status=ToolStatus.SKIPPED,
+                    error_code=None,
+                    safe_message=(
+                        "Route calculation skipped: location coordinates "
+                        "could not be resolved."
+                    ),
+                    data_origin="none",
                 )
+                results.append(skipped_res)
+                emit_tool_call_finished(skipped_res, node="execute_tools")
                 warnings.append(
                     "Route calculation skipped: starting location coordinates "
                     "could not be resolved."
@@ -790,18 +799,18 @@ def execute_tools(
                 or to_geo_res.status != ToolStatus.OK
                 or not to_geo_res.data
             ):
-                results.append(
-                    ToolResult(
-                        tool_name="get_route_context",
-                        status=ToolStatus.SKIPPED,
-                        error_code=None,
-                        safe_message=(
-                            "Route calculation skipped: location coordinates "
-                            "could not be resolved."
-                        ),
-                        data_origin="none",
-                    )
+                skipped_res = ToolResult(
+                    tool_name="get_route_context",
+                    status=ToolStatus.SKIPPED,
+                    error_code=None,
+                    safe_message=(
+                        "Route calculation skipped: location coordinates "
+                        "could not be resolved."
+                    ),
+                    data_origin="none",
                 )
+                results.append(skipped_res)
+                emit_tool_call_finished(skipped_res, node="execute_tools")
                 warnings.append(
                     "Route calculation skipped: arrival destination coordinates "
                     "could not be resolved."
@@ -825,33 +834,36 @@ def execute_tools(
                 call.arguments["dest_lat"] = float(to_cand["latitude"])
                 call.arguments["dest_lon"] = float(to_cand["longitude"])
             except (KeyError, TypeError, ValueError):
-                results.append(
-                    ToolResult(
-                        tool_name="get_route_context",
-                        status=ToolStatus.ERROR,
-                        error_code=ToolErrorCode.MALFORMED_RESPONSE,
-                        safe_message="Geocoding response missing coordinates.",
-                        data_origin="none",
-                    )
+                err_res = ToolResult(
+                    tool_name="get_route_context",
+                    status=ToolStatus.ERROR,
+                    error_code=ToolErrorCode.MALFORMED_RESPONSE,
+                    safe_message="Geocoding response missing coordinates.",
+                    data_origin="none",
                 )
+                results.append(err_res)
+                emit_tool_call_finished(err_res, node="execute_tools")
                 executed_count += 1
                 continue
 
         # Execute registered tool
         tool_impl = active_tools.get(call.tool_name)
         if tool_impl is None:
-            results.append(
-                ToolResult(
-                    tool_name=call.tool_name,
-                    status=ToolStatus.ERROR,
-                    error_code=ToolErrorCode.NOT_FOUND,
-                    safe_message=f"Tool '{call.tool_name}' is not registered.",
-                    data_origin="none",
-                )
+            not_found_res = ToolResult(
+                tool_name=call.tool_name,
+                status=ToolStatus.ERROR,
+                error_code=ToolErrorCode.NOT_FOUND,
+                safe_message=f"Tool '{call.tool_name}' is not registered.",
+                data_origin="none",
             )
+            results.append(not_found_res)
+            emit_tool_call_finished(not_found_res, node="execute_tools")
             executed_count += 1
             continue
 
+        tok_tool = set_current_tool(call.tool_name)
+        tok_in_exec = set_in_execute_tools(True)
+        t_tool_0 = time.perf_counter()
         try:
             if hasattr(tool_impl, "invoke"):
                 res = tool_impl.invoke(call.arguments)
@@ -869,7 +881,12 @@ def execute_tools(
                     data=res if isinstance(res, (dict, list)) else {"result": res},
                     data_origin="none",
                 )
+            if recorded_res.latency_ms is None:
+                recorded_res.latency_ms = max(
+                    0.0, round((time.perf_counter() - t_tool_0) * 1000.0, 2)
+                )
             results.append(recorded_res)
+            emit_tool_call_finished(recorded_res, node="execute_tools")
 
             if call.tool_name == "geocode_destination":
                 query_val = str(call.arguments.get("query", ""))
@@ -889,15 +906,21 @@ def execute_tools(
                     to_geo_res = recorded_res
 
         except Exception as err:
-            results.append(
-                ToolResult(
-                    tool_name=call.tool_name,
-                    status=ToolStatus.ERROR,
-                    error_code=ToolErrorCode.EXECUTION_FAILED,
-                    safe_message=f"Error executing tool '{call.tool_name}': {err}",
-                    data_origin="none",
-                )
+            err_res = ToolResult(
+                tool_name=call.tool_name,
+                status=ToolStatus.ERROR,
+                error_code=ToolErrorCode.EXECUTION_FAILED,
+                safe_message=f"Error executing tool '{call.tool_name}': {err}",
+                data_origin="none",
+                latency_ms=max(
+                    0.0, round((time.perf_counter() - t_tool_0) * 1000.0, 2)
+                ),
             )
+            results.append(err_res)
+            emit_tool_call_finished(err_res, node="execute_tools")
+        finally:
+            reset_in_execute_tools(tok_in_exec)
+            reset_current_tool(tok_tool)
 
         executed_count += 1
 
@@ -1066,6 +1089,15 @@ def repair_itinerary(
         state.itinerary_draft,
         request=state.trip_request,
         tool_results=state.tool_results,
+    )
+
+    attempt_num = state.repair_attempts + 1
+    issue_codes = [str(i.code) for i in current_issues]
+    emit_event(
+        "repair_attempt",
+        node="repair_itinerary",
+        attempt=attempt_num,
+        issue_codes=issue_codes,
     )
 
     structured_issues = [

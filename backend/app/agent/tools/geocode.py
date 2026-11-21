@@ -16,6 +16,7 @@ from app.agent.tools.contracts import (
     ToolStatus,
     provider_error_to_tool_result,
 )
+from app.core.logging import emit_tool_call_finished, is_in_execute_tools
 from app.providers.errors import ProviderError
 from app.providers.open_meteo import OpenMeteoClient
 
@@ -35,12 +36,12 @@ def _run_coroutine_sync(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
-async def async_geocode_destination(
+async def _async_geocode_destination_impl(
     args: GeocodeArgs | dict[str, Any] | None = None,
     client: Any | None = None,
     **kwargs: Any,
 ) -> ToolResult:
-    """Asynchronously resolve destination coordinates via Open-Meteo adapter."""
+    """Internal implementation to resolve destination coordinates."""
     start_time = time.perf_counter()
 
     # 1. Validate arguments BEFORE making any external call
@@ -138,6 +139,18 @@ async def async_geocode_destination(
             latency_ms=elapsed_ms,
             attempts=getattr(adapter, "last_attempts", 1),
         )
+
+
+async def async_geocode_destination(
+    args: GeocodeArgs | dict[str, Any] | None = None,
+    client: Any | None = None,
+    **kwargs: Any,
+) -> ToolResult:
+    """Asynchronously resolve destination coordinates via Open-Meteo adapter."""
+    res = await _async_geocode_destination_impl(args=args, client=client, **kwargs)
+    if not is_in_execute_tools():
+        emit_tool_call_finished(res)
+    return res
 
 
 def geocode_destination(

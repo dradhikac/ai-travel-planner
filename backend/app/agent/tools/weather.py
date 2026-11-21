@@ -15,6 +15,7 @@ from app.agent.tools.contracts import (
     WeatherArgs,
     provider_error_to_tool_result,
 )
+from app.core.logging import emit_tool_call_finished, is_in_execute_tools
 from app.providers.errors import ProviderError
 from app.providers.open_meteo import OpenMeteoClient
 
@@ -34,12 +35,12 @@ def _run_coroutine_sync(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
-async def async_get_weather(
+async def _async_get_weather_impl(
     args: WeatherArgs | dict[str, Any] | None = None,
     client: Any | None = None,
     **kwargs: Any,
 ) -> ToolResult:
-    """Asynchronously retrieve weather forecasts via Open-Meteo adapter."""
+    """Internal implementation to retrieve weather forecasts via Open-Meteo adapter."""
     start_time = time.perf_counter()
 
     # 1. Validate arguments BEFORE making any external call
@@ -142,6 +143,18 @@ async def async_get_weather(
             latency_ms=elapsed_ms,
             attempts=getattr(adapter, "last_attempts", 1),
         )
+
+
+async def async_get_weather(
+    args: WeatherArgs | dict[str, Any] | None = None,
+    client: Any | None = None,
+    **kwargs: Any,
+) -> ToolResult:
+    """Asynchronously retrieve weather forecasts via Open-Meteo adapter."""
+    res = await _async_get_weather_impl(args=args, client=client, **kwargs)
+    if not is_in_execute_tools():
+        emit_tool_call_finished(res)
+    return res
 
 
 def get_weather(

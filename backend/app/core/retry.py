@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Final, TypeVar
 
+from app.core.logging import emit_event
 from app.providers.errors import ErrorCode, ProviderError
 
 # Default contract constants matching Phase 4 reliability specifications
@@ -145,11 +146,17 @@ async def call_with_retry(
                 raise err
 
             # Notify diagnostic event callback
-            delay_ms = delay * 1000.0
+            delay_ms = round(delay * 1000.0, 2)
             code_str = (
                 err.code.value
                 if hasattr(err.code, "value")
                 else str(getattr(err, "error_code", err.code))
+            )
+            emit_event(
+                "retry_scheduled",
+                attempt=attempt,
+                error_code=code_str,
+                retry_delay_ms=delay_ms,
             )
             if on_event is not None:
                 on_event(attempt, code_str, delay_ms)
@@ -245,11 +252,17 @@ def call_with_retry_sync(
                 raise err
 
             # Notify diagnostic event callback
-            delay_ms = delay * 1000.0
+            delay_ms = round(delay * 1000.0, 2)
             code_str = (
                 err.code.value
                 if hasattr(err.code, "value")
                 else str(getattr(err, "error_code", err.code))
+            )
+            emit_event(
+                "retry_scheduled",
+                attempt=attempt,
+                error_code=code_str,
+                retry_delay_ms=delay_ms,
             )
             if on_event is not None:
                 on_event(attempt, code_str, delay_ms)
