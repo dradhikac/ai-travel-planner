@@ -5,6 +5,7 @@ import ToolActivityPanel, {
   sanitizeSource,
   sanitizeExplanation,
   formatStatusInWords,
+  formatToolLabel,
 } from "@/components/ToolActivityPanel";
 import type { ToolActivity } from "@/lib/types/trip";
 
@@ -53,6 +54,16 @@ describe("ToolActivityPanel Component & Sanitizers", () => {
     expect(formatStatusInWords("timeout")).toBe("Timed out");
     expect(formatStatusInWords("rate_limited")).toBe("Rate limited");
     expect(formatStatusInWords("skipped")).toBe("Skipped");
+  });
+
+  it("formatToolLabel maps technical identifiers to human labels", () => {
+    expect(formatToolLabel("get_route_context")).toBe("Route Context");
+    expect(formatToolLabel("route_context")).toBe("Route Context");
+    expect(formatToolLabel("route")).toBe("Route Context");
+    expect(formatToolLabel("geocode_destination")).toBe("Destination Geocoding");
+    expect(formatToolLabel("get_weather")).toBe("Weather Forecast");
+    expect(formatToolLabel("Route Context")).toBe("Route Context");
+    expect(formatToolLabel("Custom Tool")).toBe("Custom Tool");
   });
 
   it("renders tool activities with Live/Mock badges, status in words, and support reference", () => {
@@ -110,6 +121,29 @@ describe("ToolActivityPanel Component & Sanitizers", () => {
     // Support reference with request ID
     expect(screen.getByText(/Support reference:/i)).toBeInTheDocument();
     expect(screen.getByText("req-test-uuid-999")).toBeInTheDocument();
+  });
+
+  it("renders raw get_route_context tool label formatted as human Route Context", () => {
+    const activities: ToolActivity[] = [
+      {
+        tool_label: "get_route_context",
+        status: "ok",
+        source: "https://api.openrouteservice.org/v2/directions/foot-walking",
+        fetched_at: "2026-08-01T12:10:00Z",
+        data_origin: "mock",
+        explanation: "Calculated travel distance and estimated transit time.",
+      },
+    ];
+
+    render(
+      <ToolActivityPanel
+        activities={activities}
+        requestId="req-route-test-1"
+      />
+    );
+
+    expect(screen.getByText("Route Context")).toBeInTheDocument();
+    expect(screen.getByText(/Status: Completed/i)).toBeInTheDocument();
   });
 
   it("renders empty note when no activities occurred", () => {

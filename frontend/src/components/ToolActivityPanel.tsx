@@ -51,6 +51,31 @@ export function sanitizeExplanation(text: string): string {
 }
 
 /**
+ * Format raw tool names or identifiers into clean, human-readable labels.
+ */
+export function formatToolLabel(rawLabel: string): string {
+  if (!rawLabel || typeof rawLabel !== "string") {
+    return "Unknown Tool";
+  }
+  const trimmed = rawLabel.trim();
+  const lower = trimmed.toLowerCase();
+  if (
+    lower === "get_route_context" ||
+    lower === "route_context" ||
+    lower === "route"
+  ) {
+    return "Route Context";
+  }
+  if (lower === "geocode_destination" || lower === "geocode") {
+    return "Destination Geocoding";
+  }
+  if (lower === "get_weather" || lower === "weather") {
+    return "Weather Forecast";
+  }
+  return trimmed;
+}
+
+/**
  * Convert technical tool execution status into human-readable words.
  */
 export function formatStatusInWords(rawStatus: string): string {
@@ -130,7 +155,7 @@ export function ToolActivityPanel({
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold text-slate-900 dark:text-slate-100">
-                    {activity.tool_label}
+                    {formatToolLabel(activity.tool_label)}
                   </span>
                   <div className="flex items-center gap-2 text-xs">
                     {/* Live / Mock badge */}

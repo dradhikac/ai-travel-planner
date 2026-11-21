@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.agent.errors import ToolErrorCode
+from app.providers.errors import ErrorCode, ProviderError
 from app.schemas.provider import SourceInfo
 
 
@@ -185,6 +186,51 @@ class WeatherArgs(BaseModel):
         return self
 
 
+class RouteArgs(BaseModel):
+    """Validated arguments contract for route and transit feasibility context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    origin_lat: float = Field(
+        ...,
+        ge=-90.0,
+        le=90.0,
+        description="Origin latitude coordinate (-90 to 90)",
+    )
+    origin_lon: float = Field(
+        ...,
+        ge=-180.0,
+        le=180.0,
+        description="Origin longitude coordinate (-180 to 180)",
+    )
+    dest_lat: float = Field(
+        ...,
+        ge=-90.0,
+        le=90.0,
+        description="Destination latitude coordinate (-90 to 90)",
+    )
+    dest_lon: float = Field(
+        ...,
+        ge=-180.0,
+        le=180.0,
+        description="Destination longitude coordinate (-180 to 180)",
+    )
+    mode: Literal["walking", "cycling", "driving"] = Field(
+        default="walking",
+        description="Transit modality allow-list: walking, cycling, or driving",
+    )
+
+    @model_validator(mode="after")
+    def validate_endpoints_distinct(self) -> "RouteArgs":
+        """Verify origin and destination coordinates are distinct."""
+        if (
+            abs(self.origin_lat - self.dest_lat) < 1e-6
+            and abs(self.origin_lon - self.dest_lon) < 1e-6
+        ):
+            raise ValueError("Origin and destination coordinates cannot be identical")
+        return self
+
+
 class ToolCall(BaseModel):
     """Typed tool call planned or executed by the agent workflow."""
 
@@ -198,4 +244,51 @@ class ToolCall(BaseModel):
     )
     call_id: str | None = Field(
         default=None, description="Optional unique identifier for tracing"
+    )
+
+
+def provider_error_to_tool_result(
+    err: ProviderError,
+    tool_name: str,
+    latency_ms: float = 0.0,
+    attempts: int = 1,
+) -> ToolResult:
+    """Map a unified ProviderError to a normalized ToolResult envelope in ONE place."""
+    status: ToolStatus
+    error_code: ToolErrorCode
+
+    # Check for network unavailable specifically if legacy subclass
+    if type(err).__name__ == "NetworkUnavailableError":
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.PROVIDER_UNAVAILABLE
+    elif err.code == ErrorCode.TIMEOUT:
+        status = ToolStatus.TIMEOUT
+        error_code = ToolErrorCode.TIMEOUT
+    elif err.code == ErrorCode.RATE_LIMITED:
+        status = ToolStatus.RATE_LIMITED
+        error_code = ToolErrorCode.RATE_LIMITED
+    elif err.code == ErrorCode.AUTHENTICATION_FAILED:
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.PROVIDER_UNAVAILABLE
+    elif err.code == ErrorCode.INVALID_RESPONSE:
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.MALFORMED_RESPONSE
+    elif err.code == ErrorCode.INVALID_REQUEST:
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.INVALID_ARGUMENTS
+    else:  # ErrorCode.UNKNOWN_FAILURE and any others
+        status = ToolStatus.ERROR
+        error_code = ToolErrorCode.PROVIDER_UNAVAILABLE
+
+    return ToolResult(
+        tool_name=tool_name,
+        status=status,
+        data=None,
+        error_code=error_code,
+        safe_message=err.safe_message,
+        source=None,
+        fetched_at=None,
+        data_origin="none",
+        latency_ms=latency_ms,
+        attempts=attempts,
     )

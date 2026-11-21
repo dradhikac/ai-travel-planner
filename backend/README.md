@@ -113,6 +113,26 @@ Pure, deterministic rule-based day-by-day itinerary generation engine:
 
 ---
 
+## Phase 4 Shared Provider Error Model (`app.providers.errors`)
+
+Phase 4 introduces a unified provider exception hierarchy and classification system:
+- **`ProviderError`**: Standardized base exception carrying `code` (`ErrorCode`), `retryable` (`bool`), `safe_message` (`str`), `provider` (`str`), optional `http_status`, optional `retry_after_seconds`, and safe `details`.
+- **`ErrorCode`**: Taxonomy of standard error codes:
+  - `timeout`: Network socket or request read timeouts (retryable: True).
+  - `rate_limited`: HTTP 429 response; retryable if `Retry-After <= 4.0s`.
+  - `authentication_failed`: Invalid or missing credentials (HTTP 401/403, retryable: False).
+  - `invalid_response`: Malformed JSON or schema validation failures (retryable: False).
+  - `invalid_request`: Bad request or client input errors (HTTP 4xx, retryable: False).
+  - `unknown_failure`: Upstream 5xx outages (retryable: True) or unexpected errors.
+  - *Empty results* are handled as normal return values (`empty_result`), not exceptions.
+- **Classification Functions**:
+  - `classify_http_error(status, body_hint, headers, provider)`: Uniform HTTP error classification across all provider integrations.
+  - `classify_exception(exc, provider)`: Maps Python and library exceptions into typed `ProviderError` instances.
+- **Safe Message Sanitization**: Automatic stripping of URLs, query parameters, API keys, headers, and stack traces to ensure zero credential leakage in logs or client envelopes.
+- **Centralized ToolResult Mapping**: `provider_error_to_tool_result` in `app.agent.tools.contracts` transforms `ProviderError` into normalized `ToolResult` envelopes in one single place.
+
+---
+
 ## Architectural Boundaries
 
 - **Modular Monolith**: All application logic is organized in internal module seams.

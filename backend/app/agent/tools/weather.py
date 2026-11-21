@@ -9,16 +9,14 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.agent.errors import ToolErrorCode
-from app.agent.tools.contracts import ToolResult, ToolStatus, WeatherArgs
-from app.providers.open_meteo import (
-    HttpError,
-    MalformedResponseError,
-    NetworkUnavailableError,
-    OpenMeteoClient,
-    ProviderError,
-    RateLimitExceededError,
-    TimeoutError,
+from app.agent.tools.contracts import (
+    ToolResult,
+    ToolStatus,
+    WeatherArgs,
+    provider_error_to_tool_result,
 )
+from app.providers.errors import ProviderError
+from app.providers.open_meteo import OpenMeteoClient
 
 
 def _run_coroutine_sync(coro: Any) -> Any:
@@ -123,54 +121,11 @@ async def async_get_weather(
             attempts=getattr(adapter, "last_attempts", 1),
         )
 
-    except TimeoutError:
+    except ProviderError as err:
         elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
-        return ToolResult(
+        return provider_error_to_tool_result(
+            err=err,
             tool_name="get_weather",
-            status=ToolStatus.TIMEOUT,
-            data=None,
-            error_code=ToolErrorCode.TIMEOUT,
-            safe_message="Weather service timed out. Please try again later.",
-            data_origin="none",
-            latency_ms=elapsed_ms,
-            attempts=getattr(adapter, "last_attempts", 1),
-        )
-
-    except RateLimitExceededError:
-        elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
-        return ToolResult(
-            tool_name="get_weather",
-            status=ToolStatus.RATE_LIMITED,
-            data=None,
-            error_code=ToolErrorCode.RATE_LIMITED,
-            safe_message=("Weather service rate limit exceeded. Please retry later."),
-            data_origin="none",
-            latency_ms=elapsed_ms,
-            attempts=getattr(adapter, "last_attempts", 1),
-        )
-
-    except MalformedResponseError:
-        elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
-        return ToolResult(
-            tool_name="get_weather",
-            status=ToolStatus.ERROR,
-            data=None,
-            error_code=ToolErrorCode.MALFORMED_RESPONSE,
-            safe_message="Weather service returned an unreadable response format.",
-            data_origin="none",
-            latency_ms=elapsed_ms,
-            attempts=getattr(adapter, "last_attempts", 1),
-        )
-
-    except (NetworkUnavailableError, HttpError, ProviderError):
-        elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
-        return ToolResult(
-            tool_name="get_weather",
-            status=ToolStatus.ERROR,
-            data=None,
-            error_code=ToolErrorCode.PROVIDER_UNAVAILABLE,
-            safe_message="Weather service is temporarily unreachable.",
-            data_origin="none",
             latency_ms=elapsed_ms,
             attempts=getattr(adapter, "last_attempts", 1),
         )

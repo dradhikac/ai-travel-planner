@@ -1,0 +1,152 @@
+{
+  "fixtures": [
+    {
+      "id": "route_paris_louvre_to_eiffel",
+      "origin": [48.8606, 2.3364],
+      "destination": [48.8584, 2.2945],
+      "mode": "walking",
+      "distance_km": 3.75,
+      "duration_minutes": 48.0,
+      "attribution": "openrouteservice.org | OpenStreetMap contributors",
+      "raw_response": {
+        "routes": [
+          {
+            "summary": {
+              "distance": 3752.4,
+              "duration": 2880.0
+            },
+            "segments": [
+              {
+                "distance": 3752.4,
+                "duration": 2880.0
+              }
+            ],
+            "bbox": [2.2945, 48.8566, 2.3522, 48.8584],
+            "way_points": [0, 1]
+          }
+        ],
+        "bbox": [2.2945, 48.8566, 2.3522, 48.8584],
+        "metadata": {
+          "attribution": "openrouteservice.org | OpenStreetMap contributors",
+          "service": "routing",
+          "timestamp": 1690000000000,
+          "query": {
+            "coordinates": [[2.3364, 48.8606], [2.2945, 48.8584]],
+            "profile": "foot-walking"
+          },
+          "engine": {
+            "version": "7.1.0"
+          }
+        }
+      }
+    },
+    {
+      "id": "route_london_bigben_to_tower",
+      "origin": [51.5007, -0.1246],
+      "destination": [51.5081, -0.0759],
+      "mode": "walking",
+      "distance_km": 4.12,
+      "duration_minutes": 52.0,
+      "attribution": "openrouteservice.org | OpenStreetMap contributors",
+      "raw_response": {
+        "routes": [
+          {
+            "summary": {
+              "distance": 4120.0,
+              "duration": 3120.0
+            },
+            "segments": [
+              {
+                "distance": 4120.0,
+                "duration": 3120.0
+              }
+            ],
+            "bbox": [-0.1246, 51.5007, -0.0759, 51.5081],
+            "way_points": [0, 1]
+          }
+        ],
+        "metadata": {
+          "attribution": "openrouteservice.org | OpenStreetMap contributors",
+          "service": "routing",
+          "timestamp": 1690000000000,
+          "query": {
+            "coordinates": [[-0.1246, 51.5007], [-0.0759, 51.5081]],
+            "profile": "foot-walking"
+          }
+        }
+      }
+    },
+    {
+      "id": "route_tokyo_shinjuku_to_shibuya",
+      "origin": [35.6896, 139.7006],
+      "destination": [35.6595, 139.7013],
+      "mode": "walking",
+      "distance_km": 3.4,
+      "duration_minutes": 44.0,
+      "attribution": "openrouteservice.org | OpenStreetMap contributors",
+      "raw_response": {
+        "routes": [
+          {
+            "summary": {
+              "distance": 3400.0,
+              "duration": 2640.0
+            },
+            "segments": [
+              {
+                "distance": 3400.0,
+                "duration": 2640.0
+              }
+            ],
+            "bbox": [139.7006, 35.6595, 139.7013, 35.6896],
+            "way_points": [0, 1]
+          }
+        ],
+        "metadata": {
+          "attribution": "openrouteservice.org | OpenStreetMap contributors",
+          "service": "routing",
+          "timestamp": 1690000000000,
+          "query": {
+            "coordinates": [[139.7006, 35.6896], [139.7013, 35.6595]],
+            "profile": "foot-walking"
+          }
+        }
+      }
+    },
+    {
+      "id": "route_rome_to_florence_driving",
+      "origin": [41.8902, 12.4922],
+      "destination": [43.7696, 11.2558],
+      "mode": "driving",
+      "distance_km": 274.5,
+      "duration_minutes": 185.0,
+      "attribution": "openrouteservice.org | OpenStreetMap contributors",
+      "raw_response": {
+        "routes": [
+          {
+            "summary": {
+              "distance": 274500.0,
+              "duration": 11100.0
+            },
+            "segments": [
+              {
+                "distance": 274500.0,
+                "duration": 11100.0
+              }
+            ],
+            "bbox": [11.2558, 41.8902, 12.4922, 43.7696],
+            "way_points": [0, 1]
+          }
+        ],
+        "metadata": {
+          "attribution": "openrouteservice.org | OpenStreetMap contributors",
+          "service": "routing",
+          "timestamp": 1690000000000,
+          "query": {
+            "coordinates": [[12.4922, 41.8902], [11.2558, 43.7696]],
+            "profile": "driving-car"
+          }
+        }
+      }
+    }
+  ]
+}

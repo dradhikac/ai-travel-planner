@@ -13,22 +13,30 @@ from typing import Any
 from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 
-from app.agent.gateway import ModelGateway, RuleBasedGateway
+from app.agent.gateway import ModelGateway, get_default_gateway
 from app.agent.nodes import (
     ask_clarification,
+    build_partial_result_node,
     check_required_fields,
     draft_itinerary,
     execute_tools,
     parse_request,
     plan_tool_calls,
+    repair_itinerary,
     respond,
     validate_itinerary,
 )
 from app.agent.state import Intent, RunStatus, TripState, create_fresh_trip_state
 from app.agent.tools.contracts import ToolStatus
 from app.agent.tools.registry import TOOL_REGISTRY
+from app.agent.validation import (
+    ValidationSeverity,
+    has_critical,
+    run_itinerary_validation,
+)
 from app.core.config import (
     AGENT_RECURSION_LIMIT,
+    MAX_REPAIR_ATTEMPTS,
     MAX_TOOL_CALLS,
     get_settings,
 )
@@ -39,6 +47,7 @@ def create_agent_graph(
     tools: dict[str, Any] | None = None,
     max_tool_calls: int = MAX_TOOL_CALLS,
     max_steps: int = AGENT_RECURSION_LIMIT,
+    max_repair_attempts: int = MAX_REPAIR_ATTEMPTS,
 ) -> StateGraph:
     """Build and configure the LangGraph StateGraph with conditional edges and guards.
 
@@ -47,11 +56,12 @@ def create_agent_graph(
         tools: Optional dictionary of tools (defaults to TOOL_REGISTRY).
         max_tool_calls: Bounded limit on sequential tool invocations per workflow run.
         max_steps: Step count ceiling before triggering the runaway guard.
+        max_repair_attempts: Maximum bounded repair loops before safe degradation.
 
     Returns:
         Uncompiled StateGraph instance parameterized with injected dependencies.
     """
-    active_gateway = gateway or RuleBasedGateway()
+    active_gateway = gateway or get_default_gateway()
     active_tools = tools if tools is not None else TOOL_REGISTRY
 
     # 1. Define node wrappers bound with injected dependencies
@@ -65,7 +75,7 @@ def create_agent_graph(
         return ask_clarification(state, gateway=active_gateway)
 
     def _node_plan(state: TripState) -> dict[str, Any]:
-        return plan_tool_calls(state)
+        return plan_tool_calls(state, tools=active_tools)
 
     def _node_execute(state: TripState) -> dict[str, Any]:
         return execute_tools(state, tools=active_tools, max_tool_calls=max_tool_calls)
@@ -75,6 +85,12 @@ def create_agent_graph(
 
     def _node_validate(state: TripState) -> dict[str, Any]:
         return validate_itinerary(state)
+
+    def _node_repair(state: TripState) -> dict[str, Any]:
+        return repair_itinerary(state, gateway=active_gateway)
+
+    def _node_partial(state: TripState) -> dict[str, Any]:
+        return build_partial_result_node(state)
 
     def _node_respond(state: TripState) -> dict[str, Any]:
         return respond(state, max_steps=max_steps)
@@ -102,7 +118,7 @@ def create_agent_graph(
         """Route to draft_itinerary for planning, or respond for discovery/failure."""
         if state.step_count >= max_steps:
             return "respond"
-        if state.intent == Intent.DESTINATION_DISCOVERY:
+        if state.intent in (Intent.DESTINATION_DISCOVERY, Intent.ROUTE_PLANNING):
             return "respond"
         geo_res = next(
             (r for r in state.tool_results if r.tool_name == "geocode_destination"),
@@ -114,6 +130,40 @@ def create_agent_graph(
             return "respond"
         return "draft_itinerary"
 
+    def _route_after_validate(state: TripState) -> str:
+        """Route after validation: respond if clean, else repair or partial result."""
+        if state.step_count >= max_steps or state.itinerary_draft is None:
+            return "respond"
+
+        issues = run_itinerary_validation(
+            state.itinerary_draft,
+            request=state.trip_request,
+            tool_results=state.tool_results,
+        )
+        if not has_critical(issues):
+            return "respond"
+
+        # Check maximum repair attempts
+        if state.repair_attempts >= max_repair_attempts:
+            return "build_partial_result"
+
+        # Check for no-progress / identical critical issue set
+        current_crit_sig = sorted(
+            [
+                f"{i.code}:{i.day_number}:{i.activity_id}"
+                for i in issues
+                if i.severity == ValidationSeverity.CRITICAL
+            ]
+        )
+        if (
+            state.repair_attempts >= 1
+            and state.last_critical_issues
+            and current_crit_sig == state.last_critical_issues
+        ):
+            return "build_partial_result"
+
+        return "repair_itinerary"
+
     # 3. Assemble graph nodes
     builder = StateGraph(TripState)
     builder.add_node("parse_request", _node_parse)
@@ -123,6 +173,8 @@ def create_agent_graph(
     builder.add_node("execute_tools", _node_execute)
     builder.add_node("draft_itinerary", _node_draft)
     builder.add_node("validate_itinerary", _node_validate)
+    builder.add_node("repair_itinerary", _node_repair)
+    builder.add_node("build_partial_result", _node_partial)
     builder.add_node("respond", _node_respond)
 
     # 4. Wire edges and conditional routing
@@ -160,7 +212,19 @@ def create_agent_graph(
     )
 
     builder.add_edge("draft_itinerary", "validate_itinerary")
-    builder.add_edge("validate_itinerary", "respond")
+
+    builder.add_conditional_edges(
+        "validate_itinerary",
+        _route_after_validate,
+        {
+            "respond": "respond",
+            "repair_itinerary": "repair_itinerary",
+            "build_partial_result": "build_partial_result",
+        },
+    )
+
+    builder.add_edge("repair_itinerary", "validate_itinerary")
+    builder.add_edge("build_partial_result", "respond")
     builder.add_edge("respond", END)
 
     return builder
@@ -171,6 +235,7 @@ def compile_agent_graph(
     tools: dict[str, Any] | None = None,
     max_tool_calls: int = MAX_TOOL_CALLS,
     max_steps: int = AGENT_RECURSION_LIMIT,
+    max_repair_attempts: int = MAX_REPAIR_ATTEMPTS,
 ) -> Any:
     """Compile the configured StateGraph into an executable LangGraph instance."""
     builder = create_agent_graph(
@@ -178,6 +243,7 @@ def compile_agent_graph(
         tools=tools,
         max_tool_calls=max_tool_calls,
         max_steps=max_steps,
+        max_repair_attempts=max_repair_attempts,
     )
     return builder.compile()
 
@@ -189,6 +255,7 @@ def run_workflow(
     recursion_limit: int | None = None,
     max_tool_calls: int | None = None,
     max_steps: int | None = None,
+    max_repair_attempts: int | None = None,
 ) -> TripState:
     """Execute the full agent workflow with step guards and recursion limits.
 
@@ -199,6 +266,7 @@ def run_workflow(
         recursion_limit: Maximum super-step executions permitted by LangGraph runtime.
         max_tool_calls: Maximum sequential tool calls allowed during execution.
         max_steps: Maximum step count ceiling before step guard halts execution.
+        max_repair_attempts: Maximum bounded repair loops before safe degradation.
 
     Returns:
         Final mutated TripState document conforming to Phase 3 state architecture.
@@ -214,6 +282,11 @@ def run_workflow(
     )
     active_max_steps = (
         max_steps if max_steps is not None else settings.AGENT_RECURSION_LIMIT
+    )
+    active_max_repair_attempts = (
+        max_repair_attempts
+        if max_repair_attempts is not None
+        else settings.AGENT_MAX_REPAIR_ATTEMPTS
     )
 
     # Normalize input into valid TripState
@@ -234,6 +307,7 @@ def run_workflow(
         tools=tools,
         max_tool_calls=active_max_tool_calls,
         max_steps=active_max_steps,
+        max_repair_attempts=active_max_repair_attempts,
     )
 
     try:

@@ -23,6 +23,15 @@ This document outlines the environment variable baseline and secret-handling pol
 | `OPEN_METEO_CONNECT_TIMEOUT_SECONDS` | Backend (`backend/app/core/config.py`) | No | `3.0` | `5.0` | No |
 | `OPEN_METEO_READ_TIMEOUT_SECONDS` | Backend (`backend/app/core/config.py`) | No | `5.0` | `10.0` | No |
 | `OPEN_METEO_MAX_RETRIES` | Backend (`backend/app/core/config.py`) | No | `1` | `2` | No |
+| `PROVIDER_MAX_RETRIES` | Backend (`backend/app/core/config.py`) | No | `2` | `3` | No |
+| `PROVIDER_BACKOFF_BASE_SECONDS` | Backend (`backend/app/core/config.py`) | No | `0.5` | `1.0` | No |
+| `PROVIDER_BACKOFF_MAX_SECONDS` | Backend (`backend/app/core/config.py`) | No | `4.0` | `8.0` | No |
+| `PROVIDER_RETRY_BUDGET_SECONDS` | Backend (`backend/app/core/config.py`) | No | `8.0` | `15.0` | No |
+| `OPENROUTESERVICE_API_KEY` | Backend (`backend/app/core/config.py`) | No | *None (Optional)* | `5b3ce3597851110001cfde2x...` | Yes (API Key) |
+| `OPENROUTESERVICE_BASE_URL` | Backend (`backend/app/core/config.py`) | No | `https://api.openrouteservice.org/v2/directions` | `https://custom.ors.example/v2/directions` | No |
+| `OPENROUTESERVICE_TIMEOUT_SECONDS` | Backend (`backend/app/core/config.py`) | No | `4.0` | `8.0` | No |
+| `OPENROUTESERVICE_MAX_RETRIES` | Backend (`backend/app/core/config.py`) | No | `1` | `2` | No |
+| `ROUTING_PROVIDER_MODE` | Backend (`backend/app/core/config.py`) | No | `mock` | `live` | No |
 
 ### Notes on Variables
 - **`APP_ENV`**: Constrained to `development`, `test`, or `production`. Controls API documentation visibility (`/docs` disabled in production).
@@ -40,6 +49,15 @@ This document outlines the environment variable baseline and secret-handling pol
 - **`OPEN_METEO_CONNECT_TIMEOUT_SECONDS`**: Connect timeout in seconds for Open-Meteo requests.
 - **`OPEN_METEO_READ_TIMEOUT_SECONDS`**: Read timeout in seconds for Open-Meteo responses.
 - **`OPEN_METEO_MAX_RETRIES`**: Maximum number of bounded retries on transient connection timeouts, socket errors, and HTTP 5xx responses.
+- **`PROVIDER_MAX_RETRIES`**: Maximum number of bounded retries on transient provider failures (0..5, default 2; 0 disables retries).
+- **`PROVIDER_BACKOFF_BASE_SECONDS`**: Initial exponential backoff delay in seconds (0.1..10.0, default 0.5).
+- **`PROVIDER_BACKOFF_MAX_SECONDS`**: Maximum ceiling for any single retry delay in seconds (0.5..30.0, default 4.0).
+- **`PROVIDER_RETRY_BUDGET_SECONDS`**: Hard wall-clock cumulative retry budget in seconds (1.0..60.0, default 8.0) across all attempts.
+- **`OPENROUTESERVICE_API_KEY`**: Optional API key for live OpenRouteService directions queries. Transmitted strictly via HTTP `Authorization` header, never in query string or URL path.
+- **`OPENROUTESERVICE_BASE_URL`**: Endpoint URL for OpenRouteService v2 directions API.
+- **`OPENROUTESERVICE_TIMEOUT_SECONDS`**: HTTP client timeout in seconds for routing requests (default 4.0).
+- **`OPENROUTESERVICE_MAX_RETRIES`**: Maximum bounded retries for transient HTTP 5xx or network errors on routing requests (default 1).
+- **`ROUTING_PROVIDER_MODE`**: Provider mode for routing (`mock` or `live`). Defaults to `mock` so local and test environments operate deterministically without requiring an API key.
 
 ---
 

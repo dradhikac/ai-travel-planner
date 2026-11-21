@@ -1,6 +1,7 @@
 """Unit tests for deterministic itinerary generator service."""
 
 import re
+from collections.abc import Generator
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -40,9 +41,11 @@ BANNED_BOOKING_PHRASES = [
 
 
 @pytest.fixture(autouse=True)
-def set_reference_today() -> None:
+def set_reference_today() -> Generator[None, None, None]:
     """Inject reference date for TripRequest validation."""
     TripRequest.set_test_today(FIXED_TODAY)
+    yield
+    TripRequest.set_test_today(None)
 
 
 def create_sample_weather(

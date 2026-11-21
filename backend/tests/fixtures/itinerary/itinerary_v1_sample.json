@@ -1,0 +1,83 @@
+{
+  "summary": "3-day itinerary for Paris starting 2026-06-10 (balanced pace, party of 2). Budget allocation: ~€100.00 / day allocation ($50/person/day) across dining, transit, and sights. All activities are generated suggestions.",
+  "warnings": [
+    "Opening hours, admission details, and visitor guidelines should be verified locally or via official venues."
+  ],
+  "days": [
+    {
+      "day_number": 1,
+      "date": "2026-06-10",
+      "items": [
+        {
+          "title": "Weather Briefing: Paris",
+          "time_of_day": "morning",
+          "description": "Forecast: Moderate rain, 14.0°C to 22.5°C, rain chance 65%.",
+          "provenance": "retrieved",
+          "source_ref": "https://api.open-meteo.com/v1/forecast",
+          "note": "Retrieved from Open-Meteo. Forecast: Moderate rain, 14.0°C to 22.5°C, rain chance 65%. High rain probability (65%); indoor activities prioritized.",
+          "cost_estimate": null
+        },
+        {
+          "title": "Major Art & Cultural Gallery Visit in Paris",
+          "time_of_day": "morning",
+          "description": "Admire permanent exhibitions, fine arts collections, and cultural artifacts at a premier municipal museum in Paris.",
+          "provenance": "generated_suggestion",
+          "source_ref": "https://api.open-meteo.com/v1/forecast",
+          "note": "Opening hours, admission details, and visitor guidelines should be verified locally or via official venues. Forecast: Moderate rain, 14.0°C to 22.5°C, rain chance 65%. High rain probability (65%); indoor activities prioritized.",
+          "cost_estimate": "~€100.00 / day allocation ($50/person/day) across dining, transit, and sights."
+        },
+        {
+          "title": "Regional Culinary Food Hall Tasting in Paris",
+          "time_of_day": "afternoon",
+          "description": "Experience authentic regional delicacies and artisanal pantry staples at a community dining hall in Paris.",
+          "provenance": "generated_suggestion",
+          "source_ref": null,
+          "note": "Opening hours, admission details, and visitor guidelines should be verified locally or via official venues.",
+          "cost_estimate": "~€100.00 / day allocation ($50/person/day) across dining, transit, and sights."
+        },
+        {
+          "title": "Traditional Dinner Experience in Paris",
+          "time_of_day": "evening",
+          "description": "Savour traditional multi-course dining reflecting centuries of local gastronomic heritage in Paris.",
+          "provenance": "generated_suggestion",
+          "source_ref": null,
+          "note": "Opening hours, admission details, and visitor guidelines should be verified locally or via official venues.",
+          "cost_estimate": "~€100.00 / day allocation ($50/person/day) across dining, transit, and sights."
+        }
+      ]
+    },
+    {
+      "day_number": 2,
+      "date": "2026-06-11",
+      "items": [
+        {
+          "title": "Historic Landmark Exploration in Paris",
+          "time_of_day": "morning",
+          "description": "Examine enduring civic monuments, classical stonework, and landmark structures that shaped the history of Paris.",
+          "provenance": "generated_suggestion",
+          "source_ref": null,
+          "note": "Opening hours, admission details, and visitor guidelines should be verified locally or via official venues. Forecast: Mainly clear, 15.0°C to 24.0°C, rain chance 10%.",
+          "cost_estimate": "~€100.00 / day allocation ($50/person/day) across dining, transit, and sights."
+        },
+        {
+          "title": "Botanical Gardens & Parkland Stroll in Paris",
+          "time_of_day": "afternoon",
+          "description": "Walk along manicured garden paths, native plant collections, and quiet green corridors in Paris.",
+          "provenance": "generated_suggestion",
+          "source_ref": null,
+          "note": "Opening hours, admission details, and visitor guidelines should be verified locally or via official venues.",
+          "cost_estimate": "~€100.00 / day allocation ($50/person/day) across dining, transit, and sights."
+        },
+        {
+          "title": "Sunset Parklands Promenade in Paris",
+          "time_of_day": "evening",
+          "description": "Enjoy natural sunset light and evening fresh air from an open public lookout in Paris.",
+          "provenance": "generated_suggestion",
+          "source_ref": null,
+          "note": "Opening hours, admission details, and visitor guidelines should be verified locally or via official venues.",
+          "cost_estimate": "~€100.00 / day allocation ($50/person/day) across dining, transit, and sights."
+        }
+      ]
+    }
+  ]
+}

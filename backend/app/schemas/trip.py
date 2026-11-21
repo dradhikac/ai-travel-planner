@@ -3,6 +3,7 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 from pydantic import (
@@ -14,6 +15,11 @@ from pydantic import (
     model_validator,
 )
 
+from app.schemas.itinerary_v2 import (
+    ItineraryDayV2,
+    ItineraryV2,
+    parse_itinerary_payload,
+)
 from app.schemas.provider import Provenance, SourceInfo, WeatherSummary
 
 ALLOWED_CURRENCIES: frozenset[str] = frozenset(
@@ -183,7 +189,7 @@ class TripRequest(BaseModel):
 
 
 class ItineraryItem(BaseModel):
-    """Scheduled activity item within an itinerary day."""
+    """Scheduled activity item within an itinerary day (Legacy Schema v1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -212,8 +218,12 @@ class ItineraryItem(BaseModel):
         return v
 
 
-class ItineraryDay(BaseModel):
-    """Daily itinerary collection of activities."""
+# Legacy v1 model aliases
+ItineraryItemV1 = ItineraryItem
+
+
+class ItineraryDayV1(BaseModel):
+    """Daily itinerary collection of activities (Legacy Schema v1)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -235,12 +245,12 @@ class ItineraryDay(BaseModel):
         return v
 
 
-class Itinerary(BaseModel):
-    """Complete generated itinerary."""
+class ItineraryV1(BaseModel):
+    """Complete generated itinerary (Legacy Schema v1)."""
 
     model_config = ConfigDict(extra="forbid")
 
-    days: list[ItineraryDay] = Field(default_factory=list)
+    days: list[ItineraryDayV1] = Field(default_factory=list)
     summary: str = Field(..., max_length=500)
     warnings: list[str] = Field(
         default_factory=list,
@@ -248,7 +258,7 @@ class Itinerary(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_all_items_provenance(self) -> "Itinerary":
+    def validate_all_items_provenance(self) -> "ItineraryV1":
         """Ensure every activity item across all days has valid provenance."""
         for day in self.days:
             for item in day.items:
@@ -257,6 +267,11 @@ class Itinerary(BaseModel):
                 ):
                     raise ValueError("Itinerary items must specify a valid Provenance")
         return self
+
+
+# Primary itinerary exports point to Schema v2
+ItineraryDay = ItineraryDayV2
+Itinerary = ItineraryV2
 
 
 class ToolActivity(BaseModel):
@@ -303,7 +318,21 @@ class TripResponse(BaseModel):
         default_factory=list, description="Sanitized tool execution audit entries"
     )
     warnings: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Workflow execution metadata including repair_attempts and run_status"
+        ),
+    )
     created_at: datetime
+
+    @field_validator("itinerary", mode="before")
+    @classmethod
+    def ensure_itinerary_v2(cls, v: object) -> object:
+        """Upgrade legacy v1 itinerary payloads to v2 in memory."""
+        if isinstance(v, (dict, str)):
+            return parse_itinerary_payload(v)
+        return v
 
     @field_validator("created_at", mode="after")
     @classmethod

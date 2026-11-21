@@ -3,11 +3,17 @@
 from functools import lru_cache
 from typing import Final, Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Phase 3 Agent Workflow Bounds Constants
-MAX_TOOL_CALLS: Final[int] = 4
+# Phase 4 Agent Workflow Bounds Constants
+# Default raised from 4 to 5 to accommodate multi-tool route planning.
+# Worst-case sequential tool invocations per intent:
+# - DESTINATION_DISCOVERY: 1 (destination geocoding)
+# - WEATHER_PLANNING: 2 (destination geocoding + weather forecast)
+# - ROUTE_PLANNING: 4 (destination geocode + 2 endpoint geocodes + route context)
+# - ITINERARY_PLANNING: 2 default (geocode + weather), up to 5 with route pair
+MAX_TOOL_CALLS: Final[int] = 5
 MAX_REPAIR_ATTEMPTS: Final[int] = 2
 AGENT_RECURSION_LIMIT: Final[int] = 25
 
@@ -37,12 +43,101 @@ class Settings(BaseSettings):
     OPEN_METEO_READ_TIMEOUT_SECONDS: float = 5.0
     OPEN_METEO_MAX_RETRIES: int = 1
 
+    # Phase 4 Retry and Backoff Settings
+    PROVIDER_MAX_RETRIES: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum retry attempts on retryable provider failures.",
+    )
+    PROVIDER_BACKOFF_BASE_SECONDS: float = Field(
+        default=0.5,
+        ge=0.1,
+        le=10.0,
+        description="Initial exponential backoff delay in seconds.",
+    )
+    PROVIDER_BACKOFF_MAX_SECONDS: float = Field(
+        default=4.0,
+        ge=0.5,
+        le=30.0,
+        description="Ceiling for individual backoff wait delay in seconds.",
+    )
+    PROVIDER_RETRY_BUDGET_SECONDS: float = Field(
+        default=8.0,
+        ge=1.0,
+        le=60.0,
+        description=(
+            "Hard cumulative time budget across all retry attempts in seconds."
+        ),
+    )
+
     # Phase 3 Agent Workflow Bounds and Guardrails
     AGENT_MAX_TOOL_CALLS: int = MAX_TOOL_CALLS
     AGENT_MAX_REPAIR_ATTEMPTS: int = MAX_REPAIR_ATTEMPTS
     AGENT_RECURSION_LIMIT: int = AGENT_RECURSION_LIMIT
 
-    @field_validator("DATABASE_URL", mode="before")
+    # Phase 4 OpenRouteService Routing Provider Settings
+    OPENROUTESERVICE_API_KEY: str | None = Field(
+        default=None,
+        description="OpenRouteService API key for directions and transit context.",
+    )
+    OPENROUTESERVICE_BASE_URL: str = Field(
+        default="https://api.openrouteservice.org/v2/directions",
+        description="OpenRouteService directions API endpoint base URL.",
+    )
+    OPENROUTESERVICE_TIMEOUT_SECONDS: float = Field(
+        default=4.0,
+        ge=0.5,
+        le=30.0,
+        description="Request timeout in seconds for OpenRouteService requests.",
+    )
+    OPENROUTESERVICE_MAX_RETRIES: int = Field(
+        default=1,
+        ge=0,
+        le=5,
+        description="Max retries for transient OpenRouteService failures.",
+    )
+    ROUTING_PROVIDER_MODE: Literal["live", "mock"] = Field(
+        default="mock",
+        description="Routing provider operating mode: live API or deterministic mock.",
+    )
+
+    # Phase 4 Optional LLM Repair Gateway Settings (off by default)
+    LLM_PROVIDER: Literal["none", "openai", "anthropic", "custom"] = Field(
+        default="none",
+        description=(
+            "LLM provider for optional repair gateway: 'none' (default), "
+            "'openai', 'anthropic', 'custom'."
+        ),
+    )
+    LLM_API_KEY: str | None = Field(
+        default=None,
+        repr=False,
+        description="API key for optional LLM repair gateway (secret).",
+    )
+    LLM_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="Model identifier for optional LLM repair gateway.",
+    )
+    LLM_TIMEOUT_SECONDS: float = Field(
+        default=10.0,
+        ge=0.5,
+        le=120.0,
+        description="Request timeout in seconds for LLM repair calls.",
+    )
+    LLM_MAX_OUTPUT_TOKENS: int = Field(
+        default=2048,
+        ge=64,
+        le=8192,
+        description="Maximum output token bound for LLM repair responses.",
+    )
+
+    @field_validator(
+        "DATABASE_URL",
+        "OPENROUTESERVICE_API_KEY",
+        "LLM_API_KEY",
+        mode="before",
+    )
     @classmethod
     def empty_str_to_none(cls, v: str | None) -> str | None:
         if isinstance(v, str) and not v.strip():

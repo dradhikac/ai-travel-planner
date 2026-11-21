@@ -1,18 +1,19 @@
-"""LangChain structured tool registration and registry for Phase 3 agent tools.
+"""LangChain structured tool registration and registry for agent tools.
 
 NOTE ON DELIBERATELY UNREGISTERED TOOLS:
-'get_route_context' and 'search_places' are deliberately NOT registered in Phase 3.
-No routing or places provider adapters exist in the modular monolith codebase.
+'search_places' is deliberately NOT registered in Phase 4.
 In accordance with project truthfulness rules, tools are registered only when backed
-by an implemented, verified provider adapter (Open-Meteo geocoding and weather).
+by an implemented, verified provider adapter. 'geocode_destination' and 'get_weather'
+are backed by Open-Meteo; 'get_route_context' is backed by OpenRouteService.
 """
 
 from typing import Any
 
 from langchain_core.tools import StructuredTool
 
-from app.agent.tools.contracts import GeocodeArgs, WeatherArgs
+from app.agent.tools.contracts import GeocodeArgs, RouteArgs, WeatherArgs
 from app.agent.tools.geocode import async_geocode_destination, geocode_destination
+from app.agent.tools.route import async_get_route_context, get_route_context
 from app.agent.tools.weather import async_get_weather, get_weather
 
 
@@ -37,6 +38,12 @@ def create_tool_registry(client: Any | None = None) -> dict[str, StructuredTool]
 
     async def _async_weather(**kwargs: Any) -> Any:
         return await async_get_weather(client=client, **kwargs)
+
+    def _sync_route(**kwargs: Any) -> Any:
+        return get_route_context(client=client, **kwargs)
+
+    async def _async_route(**kwargs: Any) -> Any:
+        return await async_get_route_context(client=client, **kwargs)
 
     geocode_tool = StructuredTool.from_function(
         func=_sync_geocode,
@@ -63,9 +70,22 @@ def create_tool_registry(client: Any | None = None) -> dict[str, StructuredTool]
         args_schema=WeatherArgs,
     )
 
+    route_tool = StructuredTool.from_function(
+        func=_sync_route,
+        coroutine=_async_route,
+        name="get_route_context",
+        description=(
+            "Calculates travel time and distance between two geographic coordinates "
+            "for walking, cycling, or driving. Does not perform flight or transit "
+            "scheduling."
+        ),
+        args_schema=RouteArgs,
+    )
+
     return {
         "geocode_destination": geocode_tool,
         "get_weather": weather_tool,
+        "get_route_context": route_tool,
     }
 
 
@@ -78,6 +98,10 @@ TOOL_ALIASES: dict[str, str] = {
     "geocode_tool": "geocode_destination",
     "weather": "get_weather",
     "weather_tool": "get_weather",
+    "route": "get_route_context",
+    "routing": "get_route_context",
+    "route_tool": "get_route_context",
+    "get_route": "get_route_context",
 }
 
 
