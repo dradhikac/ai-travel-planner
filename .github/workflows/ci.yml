@@ -76,6 +76,9 @@ jobs:
           DATABASE_URL: postgresql+psycopg://postgres:postgres_ci_password@localhost:5432/ai_travel_concierge_test
         run: pytest -m integration -q
 
+      - name: Run regression test suite
+        run: pytest -m regression -q
+
   frontend:
     name: Frontend CI
     runs-on: ubuntu-latest

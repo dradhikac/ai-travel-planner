@@ -1,0 +1,24 @@
+{
+  "id": "REG-BUD-02",
+  "category": "impossible_budget",
+  "description": "Itinerary planning with negative budget triggers clarification",
+  "input": {
+    "user_message": "Trip to Paris from 2027-10-01 to 2027-10-05 with -100 EUR budget",
+    "known_fields": {
+      "origin": "London",
+      "destination": "Paris",
+      "start_date": "2027-10-01",
+      "end_date": "2027-10-05",
+      "party_size": 1,
+      "budget_amount": "-100",
+      "currency": "EUR"
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {},
+  "expected_status": "needs_clarification",
+  "expected_warning_codes": ["greater than 0"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 0
+  }
+}

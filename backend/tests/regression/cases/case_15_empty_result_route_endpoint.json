@@ -1,0 +1,26 @@
+{
+  "id": "REG-EMP-02",
+  "category": "empty_result",
+  "description": "Route starting endpoint geocode returns empty list; route calculation skipped",
+  "input": {
+    "user_message": "Directions from NowhereStation to English Garden in Munich",
+    "known_fields": {
+      "destination": "Munich",
+      "route_from": "NowhereStation",
+      "route_to": "English Garden"
+    },
+    "intent": "route_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "endpoint_empty",
+      "latency_ms": 100.0
+    }
+  },
+  "expected_status": "partial",
+  "expected_warning_codes": ["Route calculation skipped: starting location coordinates could not be resolved."],
+  "expected_tool_call_counts": {
+    "geocode_destination": 3,
+    "get_route_context": 0
+  }
+}

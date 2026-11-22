@@ -1,0 +1,27 @@
+{
+  "id": "REG-AMB-04",
+  "category": "ambiguous",
+  "description": "Itinerary planning with two places in destination field triggers clarification",
+  "input": {
+    "user_message": "Plan a trip to Paris or London from 2027-09-01 to 2027-09-05",
+    "known_fields": {
+      "destination": "Paris or London",
+      "origin": "Manchester",
+      "start_date": "2027-09-01",
+      "end_date": "2027-09-05",
+      "party_size": 1
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "empty",
+      "latency_ms": 110.0
+    }
+  },
+  "expected_status": "failed",
+  "expected_warning_codes": ["Could not find that destination ('Paris or London')"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1
+  }
+}

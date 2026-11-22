@@ -1,0 +1,37 @@
+{
+  "id": "REG-INV-02",
+  "category": "invalid_itinerary",
+  "description": "Repair loop reaches maximum attempts (2) and safely degrades to partial result",
+  "input": {
+    "user_message": "Plan trip to Munich from 2026-12-10 to 2026-12-12 for 2 travelers",
+    "known_fields": {
+      "origin": "Berlin",
+      "destination": "Munich",
+      "start_date": "2026-12-10",
+      "end_date": "2026-12-12",
+      "party_size": 2,
+      "interests": ["culture"],
+      "pace": "balanced"
+    },
+    "intent": "itinerary_planning"
+  },
+  "initial_draft": "critical_duplicate",
+  "gateway_override": "repair_exhausted",
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 100.0
+    },
+    "get_weather": {
+      "status": "ok",
+      "latency_ms": 120.0
+    }
+  },
+  "expected_status": "partial",
+  "expected_repair_attempts": 2,
+  "expected_warning_codes": ["safe partial plan due to unresolved validation constraints"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 1
+  }
+}

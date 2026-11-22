@@ -1,0 +1,32 @@
+{
+  "id": "REG-NORM-03",
+  "category": "normal",
+  "description": "Standard weather planning inquiry for Tokyo",
+  "input": {
+    "user_message": "What is the weather forecast for Tokyo from 2027-06-01 to 2027-06-03?",
+    "known_fields": {
+      "origin": "Osaka",
+      "destination": "Tokyo",
+      "start_date": "2027-06-01",
+      "end_date": "2027-06-03",
+      "party_size": 1
+    },
+    "intent": "weather_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 105.0
+    },
+    "get_weather": {
+      "status": "ok",
+      "latency_ms": 140.0
+    }
+  },
+  "expected_status": "completed",
+  "expected_warning_codes": [],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 1
+  }
+}

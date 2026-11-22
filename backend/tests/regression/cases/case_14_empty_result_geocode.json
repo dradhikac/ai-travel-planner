@@ -1,0 +1,28 @@
+{
+  "id": "REG-EMP-01",
+  "category": "empty_result",
+  "description": "Destination geocoding returns empty candidate list, skipping dependent tools",
+  "input": {
+    "user_message": "Trip to Xyznonexistentplace from 2027-11-01 to 2027-11-03",
+    "known_fields": {
+      "origin": "London",
+      "destination": "Xyznonexistentplace",
+      "start_date": "2027-11-01",
+      "end_date": "2027-11-03",
+      "party_size": 1
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "empty",
+      "latency_ms": 90.0
+    }
+  },
+  "expected_status": "failed",
+  "expected_warning_codes": ["Weather forecast skipped: geocoding did not resolve a usable location."],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 0
+  }
+}

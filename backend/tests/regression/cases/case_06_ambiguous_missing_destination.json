@@ -1,0 +1,21 @@
+{
+  "id": "REG-AMB-02",
+  "category": "ambiguous",
+  "description": "Itinerary planning missing destination city triggers clarification",
+  "input": {
+    "user_message": "Plan a trip from London from 2027-07-01 to 2027-07-05",
+    "known_fields": {
+      "origin": "London",
+      "start_date": "2027-07-01",
+      "end_date": "2027-07-05",
+      "party_size": 1
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {},
+  "expected_status": "needs_clarification",
+  "expected_warning_codes": ["destination city"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 0
+  }
+}

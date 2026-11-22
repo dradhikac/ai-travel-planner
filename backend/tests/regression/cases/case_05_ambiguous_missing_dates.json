@@ -1,0 +1,19 @@
+{
+  "id": "REG-AMB-01",
+  "category": "ambiguous",
+  "description": "Itinerary planning missing travel dates triggers clarification",
+  "input": {
+    "user_message": "Plan a trip to Rome for 2 people",
+    "known_fields": {
+      "destination": "Rome",
+      "party_size": 2
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {},
+  "expected_status": "needs_clarification",
+  "expected_warning_codes": ["travel dates"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 0
+  }
+}

@@ -5,6 +5,7 @@ pythonpath = ["."]
 addopts = "-ra -q"
 markers = [
     "integration: tests requiring an active database or live service",
+    "regression: deterministic data-driven regression test suite running offline",
 ]
 
 [tool.ruff]

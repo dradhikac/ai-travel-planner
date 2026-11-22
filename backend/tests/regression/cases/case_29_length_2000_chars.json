@@ -1,0 +1,36 @@
+{
+  "id": "REG-LEN-01",
+  "category": "length_limit",
+  "description": "2000-character long travel prompt processed without truncation failure or crash",
+  "input": {
+    "user_message": "Please assist me with planning a comprehensive travel experience to Munich Germany departing from Berlin on 2027-12-10 and returning on 2027-12-12 for 2 travelers. We have an extensive list of interests including architecture, bavarian culinary arts, historical landmarks, classical music, art galleries, walking tours, and local markets. To provide additional background detail regarding our preferences and travel party context: we thoroughly enjoy structured mornings followed by open afternoons for exploratory wandering and discovering hidden alleys, traditional cafes, and neighborhood bookshops. We are keen on spending significant time learning about the Bavarian heritage and cultural progression through the centuries. We want to ensure that our schedule is balanced and not excessively rushed, maintaining a relaxed to moderate pace that permits thorough absorption of each site rather than rapid checklist completion. Furthermore, regarding our dietary inclinations, we appreciate authentic regional cuisine including pretzels, sausages, seasonal dumplings, and regional pastries, alongside lighter contemporary dining options in the evenings. We would also be delighted if travel between different points of interest can be accomplished via scenic walking routes or straightforward public transit connections. For additional context, our group consists of two adults who are experienced urban explorers and accustomed to walking several kilometers per day across diverse urban terrains in varied weather conditions. We will be packing appropriate winter layering to accommodate cold or damp conditions without disrupting our sightseeing intentions. We also appreciate practical guidance regarding time estimation and cost indications, fully understanding that all recommendations represent indicative planning suggestions and not real-time transactional bookings or reservations. Thank you for preparing this structured plan.",
+    "known_fields": {
+      "origin": "Berlin",
+      "destination": "Munich",
+      "start_date": "2027-12-10",
+      "end_date": "2027-12-12",
+      "party_size": 2,
+      "budget_amount": "1200.00",
+      "currency": "EUR",
+      "interests": ["culture", "food"],
+      "pace": "balanced"
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 110.0
+    },
+    "get_weather": {
+      "status": "ok",
+      "latency_ms": 130.0
+    }
+  },
+  "expected_status": "completed",
+  "expected_warning_codes": [],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 1
+  }
+}

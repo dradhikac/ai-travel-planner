@@ -1,0 +1,36 @@
+{
+  "id": "REG-BUD-03",
+  "category": "impossible_budget",
+  "description": "Tokyo trip with daily budget of 1000 JPY per person below 4000 JPY hard floor",
+  "input": {
+    "user_message": "Trip to Tokyo from 2027-10-01 to 2027-10-05 for 2 people with 10000 JPY total budget",
+    "known_fields": {
+      "origin": "Osaka",
+      "destination": "Tokyo",
+      "start_date": "2027-10-01",
+      "end_date": "2027-10-05",
+      "party_size": 2,
+      "budget_amount": "10000",
+      "currency": "JPY",
+      "interests": ["culture"],
+      "pace": "balanced"
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 110.0
+    },
+    "get_weather": {
+      "status": "ok",
+      "latency_ms": 130.0
+    }
+  },
+  "expected_status": "failed",
+  "expected_warning_codes": ["BUDGET_FLOOR_VIOLATION"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 1
+  }
+}
