@@ -1,0 +1,30 @@
+{
+  "id": "REG-EMP-03",
+  "category": "empty_result",
+  "description": "Route calculation returns no viable path between locations; degrades safely",
+  "input": {
+    "user_message": "Directions from Marienplatz to English Garden in Munich",
+    "known_fields": {
+      "destination": "Munich",
+      "route_from": "Marienplatz",
+      "route_to": "English Garden"
+    },
+    "intent": "route_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 100.0
+    },
+    "get_route_context": {
+      "status": "empty",
+      "latency_ms": 150.0
+    }
+  },
+  "expected_status": "partial",
+  "expected_warning_codes": ["No routable path found between locations. Geocoded locations preserved."],
+  "expected_tool_call_counts": {
+    "geocode_destination": 3,
+    "get_route_context": 1
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "id": "REG-NORM-01",
+  "category": "normal",
+  "description": "Standard complete 3-day Paris trip with balanced pace and culture interests",
+  "input": {
+    "user_message": "Plan a 3-day trip to Paris from London from 2027-06-01 to 2027-06-03 for 2 people",
+    "known_fields": {
+      "origin": "London",
+      "destination": "Paris",
+      "start_date": "2027-06-01",
+      "end_date": "2027-06-03",
+      "party_size": 2,
+      "budget_amount": "1200.00",
+      "currency": "EUR",
+      "interests": ["culture", "food"],
+      "pace": "balanced"
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 120.0
+    },
+    "get_weather": {
+      "status": "ok",
+      "latency_ms": 150.0
+    }
+  },
+  "expected_status": "completed",
+  "expected_warning_codes": [],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 1
+  }
+}

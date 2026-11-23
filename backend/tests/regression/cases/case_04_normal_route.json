@@ -1,0 +1,31 @@
+{
+  "id": "REG-NORM-04",
+  "category": "normal",
+  "description": "Standard route inquiry between Marienplatz and English Garden in Munich",
+  "input": {
+    "user_message": "How do I walk from Marienplatz to English Garden in Munich?",
+    "known_fields": {
+      "destination": "Munich",
+      "route_from": "Marienplatz",
+      "route_to": "English Garden",
+      "route_mode": "walking"
+    },
+    "intent": "route_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 100.0
+    },
+    "get_route_context": {
+      "status": "ok",
+      "latency_ms": 180.0
+    }
+  },
+  "expected_status": "completed",
+  "expected_warning_codes": ["Retrieved walking route: 2.7 km"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 3,
+    "get_route_context": 1
+  }
+}

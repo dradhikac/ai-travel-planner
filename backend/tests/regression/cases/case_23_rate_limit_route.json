@@ -1,0 +1,31 @@
+{
+  "id": "REG-RATE-01",
+  "category": "rate_limit",
+  "description": "Route provider returns 429 Rate Limit; aborts retries; degrades to partial",
+  "input": {
+    "user_message": "Directions from Marienplatz to English Garden in Munich",
+    "known_fields": {
+      "destination": "Munich",
+      "route_from": "Marienplatz",
+      "route_to": "English Garden"
+    },
+    "intent": "route_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 100.0
+    },
+    "get_route_context": {
+      "status": "rate_limited",
+      "attempts": 1,
+      "latency_ms": 75.0
+    }
+  },
+  "expected_status": "partial",
+  "expected_warning_codes": ["Route calculation encountered an error. Geocoded locations preserved."],
+  "expected_tool_call_counts": {
+    "geocode_destination": 3,
+    "get_route_context": 1
+  }
+}

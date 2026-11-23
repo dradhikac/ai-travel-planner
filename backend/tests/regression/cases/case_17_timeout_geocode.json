@@ -1,0 +1,29 @@
+{
+  "id": "REG-TIME-01",
+  "category": "timeout",
+  "description": "Destination geocoding provider times out; retries exhausted; degrades to partial",
+  "input": {
+    "user_message": "Plan a trip to Paris from London from 2027-11-10 to 2027-11-13",
+    "known_fields": {
+      "origin": "London",
+      "destination": "Paris",
+      "start_date": "2027-11-10",
+      "end_date": "2027-11-13",
+      "party_size": 1
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "timeout",
+      "attempts": 3,
+      "latency_ms": 3000.0
+    }
+  },
+  "expected_status": "failed",
+  "expected_warning_codes": ["Location search timed out while resolving destination coordinates. Please try again in a few moments."],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 0
+  }
+}

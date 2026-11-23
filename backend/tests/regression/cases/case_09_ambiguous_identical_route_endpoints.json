@@ -1,0 +1,20 @@
+{
+  "id": "REG-AMB-05",
+  "category": "ambiguous",
+  "description": "Route inquiry with identical start and arrival locations triggers contradiction",
+  "input": {
+    "user_message": "Directions from Marienplatz to Marienplatz in Munich",
+    "known_fields": {
+      "destination": "Munich",
+      "route_from": "Marienplatz",
+      "route_to": "Marienplatz"
+    },
+    "intent": "route_planning"
+  },
+  "fake_tool_behaviours": {},
+  "expected_status": "needs_clarification",
+  "expected_warning_codes": ["Starting location and arrival destination cannot be identical"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 0
+  }
+}

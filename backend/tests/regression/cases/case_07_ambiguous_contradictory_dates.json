@@ -1,0 +1,22 @@
+{
+  "id": "REG-AMB-03",
+  "category": "ambiguous",
+  "description": "Itinerary planning with return date before departure date triggers contradiction",
+  "input": {
+    "user_message": "Trip to Paris from 2027-08-15 to 2027-08-10",
+    "known_fields": {
+      "destination": "Paris",
+      "origin": "London",
+      "start_date": "2027-08-15",
+      "end_date": "2027-08-10",
+      "party_size": 2
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {},
+  "expected_status": "needs_clarification",
+  "expected_warning_codes": ["Return date cannot be earlier than departure date"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 0
+  }
+}

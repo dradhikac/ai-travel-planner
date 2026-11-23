@@ -1,0 +1,33 @@
+{
+  "id": "REG-RATE-02",
+  "category": "rate_limit",
+  "description": "Weather provider returns 429 Rate Limit; degrades safely to partial",
+  "input": {
+    "user_message": "Plan a trip to Paris from 2027-11-20 to 2027-11-22",
+    "known_fields": {
+      "origin": "London",
+      "destination": "Paris",
+      "start_date": "2027-11-20",
+      "end_date": "2027-11-22",
+      "party_size": 1
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 100.0
+    },
+    "get_weather": {
+      "status": "rate_limited",
+      "attempts": 1,
+      "latency_ms": 80.0
+    }
+  },
+  "expected_status": "partial",
+  "expected_warning_codes": ["Weather forecast service is experiencing high demand; itinerary generated without live weather."],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 1
+  }
+}

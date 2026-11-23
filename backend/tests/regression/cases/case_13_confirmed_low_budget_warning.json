@@ -1,0 +1,36 @@
+{
+  "id": "REG-BUD-04",
+  "category": "impossible_budget",
+  "description": "Berlin trip with confirmed tight daily budget attaches low budget advisory note",
+  "input": {
+    "user_message": "Budget trip to Berlin from 2027-10-01 to 2027-10-03 for 1 person with 100 EUR total budget",
+    "known_fields": {
+      "origin": "Munich",
+      "destination": "Berlin",
+      "start_date": "2027-10-01",
+      "end_date": "2027-10-03",
+      "party_size": 1,
+      "budget_amount": "100.00",
+      "currency": "EUR",
+      "interests": ["culture"],
+      "pace": "balanced"
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 115.0
+    },
+    "get_weather": {
+      "status": "ok",
+      "latency_ms": 135.0
+    }
+  },
+  "expected_status": "completed",
+  "expected_warning_codes": ["Itinerary validation identified"],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 1
+  }
+}

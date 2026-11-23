@@ -1,0 +1,33 @@
+{
+  "id": "REG-TIME-02",
+  "category": "timeout",
+  "description": "Weather provider times out across retries; geocoded location preserved; degrades to partial",
+  "input": {
+    "user_message": "Plan a trip to Rome from New York from 2027-11-20 to 2027-11-23",
+    "known_fields": {
+      "origin": "New York",
+      "destination": "Rome",
+      "start_date": "2027-11-20",
+      "end_date": "2027-11-23",
+      "party_size": 2
+    },
+    "intent": "itinerary_planning"
+  },
+  "fake_tool_behaviours": {
+    "geocode_destination": {
+      "status": "ok",
+      "latency_ms": 100.0
+    },
+    "get_weather": {
+      "status": "timeout",
+      "attempts": 3,
+      "latency_ms": 3000.0
+    }
+  },
+  "expected_status": "partial",
+  "expected_warning_codes": ["Weather forecast service timed out; itinerary generated without live weather."],
+  "expected_tool_call_counts": {
+    "geocode_destination": 1,
+    "get_weather": 1
+  }
+}
